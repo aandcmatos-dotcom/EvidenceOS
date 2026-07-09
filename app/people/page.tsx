@@ -9,18 +9,13 @@ const roleColors: Record<string, string> = {
   Attorney: "bg-green-100 text-green-700",
 };
 
-const allPeople = [
-  ...mockPeople,
-  { id: 6, name: "Hon. Patricia Williams", role: "Judge", relationship: "Family Court Judge", phone: "" },
-  { id: 7, name: "Atty. Marcus Webb", role: "Attorney", relationship: "Petitioner Counsel", phone: "(310) 555-0122" },
-  { id: 8, name: "Ms. Linda Torres", role: "Witness", relationship: "Neighbor / Witness", phone: "(310) 555-0189" },
-];
+const allPeople = mockPeople;
 
 export default function PeoplePage() {
   return (
     <AppLayout title="People">
       <div className="flex items-center justify-between mb-6">
-        <p className="text-gray-500 text-sm">{allPeople.length} people in this case</p>
+        <p className="text-gray-500 text-sm">{mockPeople.length} people in this case</p>
         <button className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
           <Plus size={15} /> Add Person
         </button>
