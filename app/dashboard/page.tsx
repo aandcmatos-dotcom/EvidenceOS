@@ -2,7 +2,7 @@ import AppLayout from "@/components/AppLayout";
 import {
   mockMetrics,
   mockPatternInsights,
-  mockRecentEvidence,
+  mockEvidence,
   mockTimelineEvents,
   mockTasks,
 } from "@/lib/mock-data";
@@ -140,7 +140,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-gray-500 line-clamp-1">{event.description}</p>
                 </div>
                 <div className="flex-shrink-0 text-xs text-gray-400 group-hover:text-purple-600 transition-colors">
-                  {event.evidenceCount} file{event.evidenceCount !== 1 ? "s" : ""}
+                  {event.evidenceIds.length} file{event.evidenceIds.length !== 1 ? "s" : ""}
                 </div>
               </div>
             ))}
@@ -195,7 +195,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="space-y-2">
-            {mockRecentEvidence.map((item) => (
+            {mockEvidence.slice(0, 3).map((item) => (
               <div
                 key={item.id}
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer group"
@@ -205,7 +205,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate group-hover:text-purple-700 transition-colors">
-                    {item.name}
+                    {item.title}
                   </p>
                   <p className="text-xs text-gray-400">
                     {item.category} · {item.date} · {item.size}

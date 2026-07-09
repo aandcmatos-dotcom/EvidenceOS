@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Zap,
   Shield,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/court-orders", label: "Court Orders", icon: Scale },
+  { href: "/patterns", label: "AI Insights", icon: Sparkles },
   { href: "/hearing-notebook", label: "Hearing Notebook", icon: BookOpen },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
