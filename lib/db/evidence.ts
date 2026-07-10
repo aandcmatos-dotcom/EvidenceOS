@@ -62,10 +62,13 @@ export async function uploadEvidenceFile(caseId: string, file: File): Promise<st
   return path;
 }
 
-export async function getEvidenceFileUrl(path: string): Promise<string> {
+export async function getEvidenceFileUrl(path: string, expiresInSeconds = 3600): Promise<string> {
   const supabase = createClient();
-  const { data } = supabase.storage.from("evidence-files").getPublicUrl(path);
-  return data.publicUrl;
+  const { data, error } = await supabase.storage
+    .from("evidence-files")
+    .createSignedUrl(path, expiresInSeconds);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 export async function linkEvidenceToEvent(evidenceId: string, eventId: string) {
