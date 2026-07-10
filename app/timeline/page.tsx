@@ -1,180 +1,122 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppLayout from "@/components/AppLayout";
-import { mockTimelineEvents, mockPeople, mockEvidence, type TimelineEvent } from "@/lib/mock-data";
+import Modal from "@/components/Modal";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import {
-  Filter, Plus, Download, Search, X, Flag, FileText,
-  Users, BookMarked, Calendar, ChevronDown, AlertTriangle,
-} from "lucide-react";
+import { Filter, Plus, Search, X, Flag, Clock, Trash2 } from "lucide-react";
 
-const CATEGORIES = [
-  "All", "Exchanges", "School", "Medical",
-  "Police", "Communications", "Court Orders", "Financial", "Other",
-];
+const CATEGORIES = ["All", "Exchange", "School", "Medical", "Communications", "Police", "Court Orders", "Financial", "Other"];
 
-const categoryStyle: Record<string, { dot: string; bg: string; text: string }> = {
-  Exchanges:     { dot: "bg-red-500",    bg: "bg-red-50",    text: "text-red-700" },
-  School:        { dot: "bg-orange-500", bg: "bg-orange-50", text: "text-orange-700" },
-  Medical:       { dot: "bg-yellow-500", bg: "bg-yellow-50", text: "text-yellow-700" },
-  Police:        { dot: "bg-blue-600",   bg: "bg-blue-50",   text: "text-blue-700" },
-  Communications:{ dot: "bg-purple-500", bg: "bg-purple-50", text: "text-purple-700" },
-  "Court Orders":{ dot: "bg-indigo-600", bg: "bg-indigo-50", text: "text-indigo-700" },
-  Financial:     { dot: "bg-green-600",  bg: "bg-green-50",  text: "text-green-700" },
-  Other:         { dot: "bg-gray-400",   bg: "bg-gray-50",   text: "text-gray-600" },
+const categoryStyle: Record<string, { dot: string; badge: string }> = {
+  Exchange:       { dot: "bg-red-500",    badge: "bg-red-50 text-red-700 border-red-100" },
+  School:         { dot: "bg-orange-500", badge: "bg-orange-50 text-orange-700 border-orange-100" },
+  Medical:        { dot: "bg-yellow-500", badge: "bg-yellow-50 text-yellow-700 border-yellow-100" },
+  Police:         { dot: "bg-blue-600",   badge: "bg-blue-50 text-blue-700 border-blue-100" },
+  Communications: { dot: "bg-purple-500", badge: "bg-purple-50 text-purple-700 border-purple-100" },
+  "Court Orders": { dot: "bg-indigo-500", badge: "bg-indigo-50 text-indigo-700 border-indigo-100" },
+  Financial:      { dot: "bg-green-500",  badge: "bg-green-50 text-green-700 border-green-100" },
+  Other:          { dot: "bg-gray-400",   badge: "bg-gray-50 text-gray-600 border-gray-100" },
 };
 
-const severityBadge: Record<string, string> = {
+const severityColors: Record<string, string> = {
   high:   "bg-red-100 text-red-700 border-red-200",
   medium: "bg-orange-100 text-orange-700 border-orange-200",
   low:    "bg-blue-100 text-blue-700 border-blue-200",
 };
 
-function PersonChip({ id }: { id: number }) {
-  const p = mockPeople.find((x) => x.id === id);
-  return (
-    <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-      <Users size={10} /> {p?.name ?? "Unknown"}
-    </span>
-  );
-}
-
-function EvidenceChip({ id }: { id: number }) {
-  const e = mockEvidence.find((x) => x.id === id);
-  return (
-    <span className="flex items-center gap-1 text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full">
-      <FileText size={10} /> {e?.title ?? "File"}
-    </span>
-  );
-}
-
-function EventCard({ event, isLast }: { event: TimelineEvent; isLast: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const catStyle = categoryStyle[event.category] ?? categoryStyle.Other;
-
-  return (
-    <div className="flex items-start gap-4 group">
-      {/* Date column */}
-      <div className="w-24 text-right flex-shrink-0 pt-4">
-        <span className="text-xs font-semibold text-gray-500">{event.shortDate}</span>
-        {event.flagged && <div className="flex justify-end mt-0.5"><Flag size={11} className="text-red-500" /></div>}
-      </div>
-
-      {/* Timeline line + dot */}
-      <div className="flex flex-col items-center flex-shrink-0 relative z-10">
-        <div className={cn("w-4 h-4 rounded-full border-2 border-white shadow-sm mt-4", catStyle.dot)} />
-        {!isLast && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-[60px]" />}
-      </div>
-
-      {/* Card */}
-      <div className="flex-1 pb-6 pt-2">
-        <div className={cn(
-          "bg-white border rounded-2xl overflow-hidden hover:shadow-md transition-all",
-          event.flagged ? "border-red-200" : "border-gray-100 hover:border-purple-200"
-        )}>
-          <div className="p-4">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-gray-900 text-sm">{event.title}</span>
-                <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border", severityBadge[event.severity])}>
-                  {event.severity}
-                </span>
-                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", catStyle.bg, catStyle.text)}>
-                  {event.category}
-                </span>
-                {event.flagged && (
-                  <span className="flex items-center gap-1 text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">
-                    <Flag size={10} /> Important
-                  </span>
-                )}
-              </div>
-              <span className="text-xs text-gray-400 flex-shrink-0 flex items-center gap-1">
-                <Calendar size={11} /> {event.date}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 leading-relaxed">{event.description}</p>
-
-            {/* Exhibit refs inline */}
-            {event.exhibitRefs.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {event.exhibitRefs.map((ref) => (
-                  <span key={ref} className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
-                    <BookMarked size={10} /> {ref}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Expand toggle */}
-          <div className="border-t border-gray-50 px-4 py-2">
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="w-full flex items-center justify-between text-xs text-gray-400 hover:text-purple-600 transition-colors"
-            >
-              <span>
-                {event.evidenceIds.length} evidence file{event.evidenceIds.length !== 1 ? "s" : ""} ·{" "}
-                {event.peopleIds.length} person{event.peopleIds.length !== 1 ? "s" : ""}
-              </span>
-              <ChevronDown size={13} className={cn("transition-transform duration-200", expanded && "rotate-180")} />
-            </button>
-
-            {expanded && (
-              <div className="mt-3 space-y-3">
-                {event.peopleIds.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">People Involved</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {event.peopleIds.map((pid) => <PersonChip key={pid} id={pid} />)}
-                    </div>
-                  </div>
-                )}
-                {event.evidenceIds.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Supporting Evidence</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {event.evidenceIds.map((eid) => <EvidenceChip key={eid} id={eid} />)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+interface TimelineEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  event_date: string;
+  category: string;
+  severity: string;
+  flagged: boolean;
 }
 
 export default function TimelinePage() {
-  const [activeCategory, setActiveCategory] = useState("All");
+  const { activeCase } = useAuth();
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
-
-  const filtered = mockTimelineEvents.filter((e) => {
-    const matchCat = activeCategory === "All" || e.category === activeCategory;
-    const matchSearch = !search ||
-      e.title.toLowerCase().includes(search.toLowerCase()) ||
-      e.description.toLowerCase().includes(search.toLowerCase());
-    const matchFlag = !showFlaggedOnly || e.flagged;
-    return matchCat && matchSearch && matchFlag;
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: "", description: "", event_date: "", category: "Other", severity: "medium", flagged: false,
   });
 
-  // Sort newest first
-  const sorted = [...filtered].sort((a, b) => b.id - a.id);
+  const supabase = createClient();
+
+  const fetchEvents = useCallback(async () => {
+    if (!activeCase) return;
+    setLoading(true);
+    const { data } = await supabase
+      .from("timeline_events")
+      .select("id, title, description, event_date, category, severity, flagged")
+      .eq("case_id", activeCase.id)
+      .order("event_date", { ascending: false });
+    setEvents((data ?? []) as TimelineEvent[]);
+    setLoading(false);
+  }, [activeCase]);
+
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  const addEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeCase || !form.title.trim() || !form.event_date) return;
+    setSaving(true);
+    await supabase.from("timeline_events").insert({
+      case_id: activeCase.id,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      event_date: form.event_date,
+      category: form.category,
+      severity: form.severity,
+      flagged: form.flagged,
+    } as never);
+    setForm({ title: "", description: "", event_date: "", category: "Other", severity: "medium", flagged: false });
+    setModalOpen(false);
+    setSaving(false);
+    fetchEvents();
+  };
+
+  const toggleFlag = async (ev: TimelineEvent) => {
+    await supabase.from("timeline_events").update({ flagged: !ev.flagged } as never).eq("id", ev.id);
+    setEvents((prev) => prev.map((e) => e.id === ev.id ? { ...e, flagged: !e.flagged } : e));
+  };
+
+  const deleteEvent = async (id: string) => {
+    if (!confirm("Delete this event?")) return;
+    await supabase.from("timeline_events").delete().eq("id", id);
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const filtered = events.filter((ev) => {
+    if (flaggedOnly && !ev.flagged) return false;
+    if (activeCategory !== "All" && ev.category !== activeCategory) return false;
+    if (search && !ev.title.toLowerCase().includes(search.toLowerCase()) && !(ev.description ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
     <AppLayout title="Timeline">
-      {/* Toolbar */}
+      {/* Controls */}
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search events..."
-            className="w-full pl-9 pr-9 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+            placeholder="Search events…"
+            className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -182,80 +124,155 @@ export default function TimelinePage() {
             </button>
           )}
         </div>
-
         <button
-          onClick={() => setShowFlaggedOnly(!showFlaggedOnly)}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors",
-            showFlaggedOnly
-              ? "bg-red-50 border-red-200 text-red-600"
-              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-          )}
+          onClick={() => setFlaggedOnly(!flaggedOnly)}
+          className={cn("flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors", flaggedOnly ? "bg-red-50 text-red-600 border-red-200" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300")}
         >
-          <Flag size={14} /> {showFlaggedOnly ? "Showing Flagged" : "Show Flagged"}
+          <Flag size={14} /> Flagged
         </button>
-
-        <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors bg-white">
-          <Download size={14} /> Export CSV
-        </button>
-        <button className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors shadow-sm">
-          <Plus size={14} /> Add Event
+        <button
+          onClick={() => setModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors ml-auto"
+        >
+          <Plus size={15} /> Add Event
         </button>
       </div>
 
-      {/* Category filter pills */}
+      {/* Category pills */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
-        {CATEGORIES.map((cat) => {
-          const style = categoryStyle[cat];
-          const isActive = activeCategory === cat;
-          return (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                isActive
-                  ? "bg-purple-600 text-white border-purple-600 shadow-sm"
-                  : "bg-white border-gray-200 text-gray-600 hover:border-purple-300 hover:text-purple-600"
-              )}
-            >
-              {style && <span className={cn("w-2 h-2 rounded-full", style.dot)} />}
-              {cat}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 flex-wrap mb-5 px-2">
-        {Object.entries(categoryStyle).map(([cat, style]) => (
-          <div key={cat} className="flex items-center gap-1.5">
-            <span className={cn("w-2.5 h-2.5 rounded-full", style.dot)} />
-            <span className="text-xs text-gray-500">{cat}</span>
-          </div>
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+              activeCategory === cat ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-600"
+            )}
+          >
+            {cat !== "All" && <span className={cn("w-2 h-2 rounded-full", categoryStyle[cat]?.dot ?? "bg-gray-400")} />}
+            {cat}
+          </button>
         ))}
       </div>
 
-      {/* Summary */}
-      <p className="text-xs text-gray-400 mb-5">
-        Showing <strong className="text-gray-600">{sorted.length}</strong> of {mockTimelineEvents.length} events
-        {showFlaggedOnly && " · Flagged only"}
-        {search && ` · Search: "${search}"`}
-      </p>
-
-      {/* Timeline */}
-      {sorted.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-          <AlertTriangle size={28} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No events match your filters.</p>
+      {/* Events */}
+      {loading ? (
+        <div className="text-center py-16 text-gray-400 text-sm">Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <Clock size={40} className="text-gray-200 mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">{events.length === 0 ? "No events yet. Add your first timeline event." : "No events match your filters."}</p>
         </div>
       ) : (
-        <div className="relative">
-          {sorted.map((event, i) => (
-            <EventCard key={event.id} event={event} isLast={i === sorted.length - 1} />
-          ))}
+        <div className="space-y-3">
+          {filtered.map((ev) => {
+            const style = categoryStyle[ev.category] ?? categoryStyle.Other;
+            return (
+              <div key={ev.id} className={cn("bg-white rounded-2xl border shadow-sm p-5 group", ev.flagged ? "border-red-200" : "border-gray-100")}>
+                <div className="flex items-start gap-4">
+                  <div className="text-center min-w-[52px] flex-shrink-0">
+                    <p className="text-xs text-gray-400 font-medium">{formatDate(ev.event_date)}</p>
+                  </div>
+                  <div className={cn("w-3 h-3 rounded-full mt-1 flex-shrink-0", style.dot)} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-sm font-semibold text-gray-900">{ev.title}</span>
+                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border", severityColors[ev.severity] ?? severityColors.low)}>
+                        {ev.severity}
+                      </span>
+                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border", style.badge)}>
+                        {ev.category}
+                      </span>
+                      {ev.flagged && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">Flagged</span>}
+                    </div>
+                    {ev.description && <p className="text-xs text-gray-500 leading-relaxed">{ev.description}</p>}
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => toggleFlag(ev)} title={ev.flagged ? "Unflag" : "Flag"} className={cn("p-1.5 rounded-lg transition-colors", ev.flagged ? "text-red-500 hover:bg-red-50" : "text-gray-400 hover:text-red-400 hover:bg-red-50")}>
+                      <Flag size={14} />
+                    </button>
+                    <button onClick={() => deleteEvent(ev.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-50 transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Timeline Event">
+        <form onSubmit={addEvent} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Event Title</label>
+            <input
+              type="text"
+              required
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Brief description of what happened"
+              className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Date</label>
+            <input
+              type="date"
+              required
+              value={form.event_date}
+              onChange={(e) => setForm((f) => ({ ...f, event_date: e.target.value }))}
+              className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Details</label>
+            <textarea
+              rows={3}
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="What happened? Who was involved? Where?"
+              className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 resize-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Category</label>
+              <select
+                value={form.category}
+                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 bg-white"
+              >
+                {CATEGORIES.filter((c) => c !== "All").map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Severity</label>
+              <select
+                value={form.severity}
+                onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value }))}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 bg-white"
+              >
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.flagged} onChange={(e) => setForm((f) => ({ ...f, flagged: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+            <span className="text-sm text-gray-700">Flag this event as important</span>
+          </label>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-bold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+              {saving ? "Saving…" : "Add Event"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </AppLayout>
   );
 }
