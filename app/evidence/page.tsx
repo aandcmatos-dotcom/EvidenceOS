@@ -33,7 +33,7 @@ interface EvidenceRow {
   category: string;
   file_path: string | null;
   file_type: string | null;
-  file_size: number | null;
+  file_size_bytes: number | null;
   notes: string | null;
   status: string;
   date_of_document: string | null;
@@ -103,7 +103,7 @@ function EvidenceCard({
               {docDate && <span className="flex items-center gap-1"><Calendar size={11} /> {docDate}</span>}
               <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.category}</span>
               {item.file_type && <span>{item.file_type.toUpperCase()}</span>}
-              {item.file_size && <span>{formatBytes(item.file_size)}</span>}
+              {item.file_size_bytes && <span>{formatBytes(item.file_size_bytes)}</span>}
             </div>
           </div>
         </div>
@@ -173,7 +173,7 @@ export default function EvidencePage() {
     setLoading(true);
     const { data } = await supabase
       .from("evidence")
-      .select("id, title, category, file_path, file_type, file_size, notes, status, date_of_document, tags, created_at")
+      .select("id, title, category, file_path, file_type, file_size_bytes, notes, status, date_of_document, tags, created_at")
       .eq("case_id", activeCase.id)
       .order("created_at", { ascending: false });
     setEvidence((data ?? []) as EvidenceRow[]);
@@ -218,11 +218,12 @@ export default function EvidencePage() {
 
       await supabase.from("evidence").insert({
         case_id: activeCase.id,
+        uploaded_by: (await supabase.auth.getUser()).data.user?.id,
         title: form.title.trim(),
         category: form.category,
         file_path: filePath,
         file_type: fileType,
-        file_size: fileSize,
+        file_size_bytes: fileSize,
         notes: form.notes.trim() || null,
         date_of_document: form.date_of_document || null,
         tags: tags.length > 0 ? tags : null,
