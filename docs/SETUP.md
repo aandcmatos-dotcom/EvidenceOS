@@ -1,6 +1,13 @@
-# Evidence OS — Setup Guide (Documents / AI / References / Review)
+# Evidence OS — Setup Guide (Documents / AI / References / Review / Court Actions)
 
 Everything you need to get the new modules running without hitting errors. Do these **in order**.
+
+> **Court Action Workspace branch (`claude/court-action-workspace`):** one additional migration —
+> run `supabase/migrations/006_court_actions.sql` in the Supabase SQL Editor after 003–005. It adds
+> the 28 Court Action tables (actions, fact/citation approvals, packages, style profiles,
+> jurisdiction packs, discovery, questions, hearing packages, exhibit packets), all idempotent with
+> RLS. No storage buckets or manual policies needed. New sidebar modules: Court Actions, Discovery,
+> Hearing Preparation, Question Builder.
 
 ---
 

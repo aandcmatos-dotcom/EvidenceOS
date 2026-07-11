@@ -8,9 +8,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const SCAN_DIRS = [
-  "app/court-actions", "app/discovery", "app/hearing-preparation",
+  "app/court-actions", "app/discovery", "app/hearing-preparation", "app/questions",
   "components/court-actions", "lib/mock/court-actions.ts", "lib/mock/document-definitions.ts",
   "lib/court-actions",
+  "lib/services/questionGenerationService.ts", "lib/services/discoveryService.ts",
+  "lib/services/proceduralChecklistService.ts", "lib/services/legalReferenceSuggestionService.ts",
 ];
 
 // Banned as user-facing labels for document options / outcomes (Section 2 + 7).

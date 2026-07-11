@@ -24,6 +24,7 @@ import {
   Gavel,
   FileSearch,
   CalendarClock,
+  MessageCircleQuestion,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ const navItems = [
   { href: "/court-actions", label: "Court Actions", icon: Gavel },
   { href: "/discovery", label: "Discovery", icon: FileSearch },
   { href: "/hearing-preparation", label: "Hearing Preparation", icon: CalendarClock },
+  { href: "/questions", label: "Question Builder", icon: MessageCircleQuestion },
   { href: "/documents", label: "Documents", icon: FileText },
   { href: "/references", label: "References", icon: Library },
   { href: "/document-review", label: "Document Review", icon: ClipboardCheck },

@@ -5,7 +5,8 @@ import AppLayout from "@/components/AppLayout";
 import Modal from "@/components/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { BookMarked, Plus, Trash2 } from "lucide-react";
+import { buildPacketHtml, type PacketExhibit } from "@/lib/services/exhibitPacketService";
+import { BookMarked, Plus, Trash2, Printer } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Exhibit {
@@ -79,6 +80,22 @@ export default function ExhibitsPage() {
     if (!error) setExhibits((prev) => prev.map((x) => x.id === ex.id ? { ...x, status: next } : x));
   };
 
+  const printPacket = () => {
+    const packet: PacketExhibit[] = exhibits.map((ex) => ({
+      evidenceId: ex.evidence_id ?? ex.id,
+      exhibitNumber: ex.number,
+      title: ex.title,
+      category: ex.status === "marked" ? "Marked" : "Pending",
+      documentDate: null,
+      description: ex.description,
+    }));
+    const html = buildPacketHtml(activeCase?.name ?? "Case", "Exhibit Packet", packet);
+    const win = window.open("", "_blank");
+    if (!win) { alert("Pop-up blocked — allow pop-ups to print the packet."); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
   const deleteExhibit = async (id: string) => {
     if (!confirm("Delete this exhibit? (The underlying evidence file is not deleted.)")) return;
     const { error } = await supabase.from("exhibits").delete().eq("id", id);
@@ -91,9 +108,15 @@ export default function ExhibitsPage() {
         <p className="text-gray-500 text-sm">
           {loading ? "Loading…" : `${exhibits.length} exhibits · ${exhibits.filter((e) => e.admitted).length} admitted`}
         </p>
-        <button onClick={openModal} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
-          <Plus size={15} /> Create Exhibit
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={printPacket} disabled={exhibits.length === 0}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:border-purple-300 hover:text-purple-700 disabled:opacity-40 transition-colors">
+            <Printer size={15} /> Print Exhibit Packet
+          </button>
+          <button onClick={openModal} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+            <Plus size={15} /> Create Exhibit
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

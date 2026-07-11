@@ -25,7 +25,7 @@ const CARDS = [
   { href: "/hearing-preparation", icon: CalendarClock, title: "Prepare for a hearing", desc: "Build a hearing package: summaries, questions, exhibits, checklists." },
   { href: "/court-actions/new", icon: Reply, title: "Respond to a filing", desc: "Prepare a response to something the other party filed." },
   { href: "/discovery", icon: FileSearch, title: "Request information or records", desc: "Discovery requests and third-party records." },
-  { href: "/court-actions/new", icon: HelpCircle, title: "Create questions", desc: "Witness, deposition, and examination question drafts." },
+  { href: "/questions", icon: HelpCircle, title: "Create questions", desc: "Witness, deposition, and examination question drafts." },
   { href: "/exhibits", icon: FolderOpen, title: "Build an exhibit packet", desc: "Index, coversheets, and a combined packet from your evidence." },
   { href: "/reports", icon: FileText, title: "Generate a summary", desc: "Case, event, and evidence summaries from your records." },
   { href: "/document-review", icon: ClipboardCheck, title: "Review a document", desc: "Source, citation, procedure, and writing checks." },
