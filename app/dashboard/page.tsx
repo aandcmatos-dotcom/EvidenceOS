@@ -127,6 +127,25 @@ export default function DashboardPage() {
               label="Open Tasks" value={loading ? "…" : metrics.tasks.toString()} sub="Pending items" subColor="text-orange-600" />
           </div>
 
+          {/* Documents & references quick access */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <Link href="/documents" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:border-purple-200 transition-all flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center"><FileText size={18} className="text-purple-600" /></div>
+              <div className="flex-1"><p className="text-sm font-semibold text-gray-900">Documents</p><p className="text-xs text-gray-400">Draft & review documents</p></div>
+              <ArrowRight size={15} className="text-gray-300 group-hover:text-purple-400 transition-colors" />
+            </Link>
+            <Link href="/references" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:border-purple-200 transition-all flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center"><FolderOpen size={18} className="text-indigo-600" /></div>
+              <div className="flex-1"><p className="text-sm font-semibold text-gray-900">References</p><p className="text-xs text-gray-400">Verify rules & procedures</p></div>
+              <ArrowRight size={15} className="text-gray-300 group-hover:text-purple-400 transition-colors" />
+            </Link>
+            <Link href="/document-review" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:border-purple-200 transition-all flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><CheckSquare size={18} className="text-green-600" /></div>
+              <div className="flex-1"><p className="text-sm font-semibold text-gray-900">Document Review</p><p className="text-xs text-gray-400">Source & procedure checks</p></div>
+              <ArrowRight size={15} className="text-gray-300 group-hover:text-purple-400 transition-colors" />
+            </Link>
+          </div>
+
           <div className="grid grid-cols-3 gap-5 mb-5">
             {/* Timeline */}
             <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
