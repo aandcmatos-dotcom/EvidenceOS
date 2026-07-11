@@ -54,8 +54,8 @@ export default function OnboardingPage() {
       setError(caseError.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
-      router.refresh();
+      // Full reload so AuthContext re-fetches cases fresh
+      window.location.href = "/dashboard";
     }
   };
 
