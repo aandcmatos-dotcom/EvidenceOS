@@ -71,6 +71,21 @@ export const SCHOOL_RELIEF_QUESTIONS: GuidedQuestion[] = [
   { id: "gq10", prompt: "Add any facts, background, concerns, or instructions that were not covered above.", whyAsking: "Anything you add here is labeled user-provided and stays under your control.", kind: "long_text", required: false },
 ];
 
+// Generic guided questions used for task types without a dedicated bank yet.
+export const GENERIC_QUESTIONS: GuidedQuestion[] = [
+  { id: "gg1", prompt: "What are you asking the court (or the other party) to consider?", whyAsking: "The requested outcome anchors every document in the package.", kind: "long_text", required: true },
+  { id: "gg2", prompt: "What existing order or agreement, if any, addresses this issue?", whyAsking: "Documents usually reference the governing order so drafts can quote it instead of paraphrasing.", kind: "text", required: false },
+  { id: "gg3", prompt: "What dates matter most for this task?", whyAsking: "Dates you provide are recorded as user-entered facts; the system does not calculate legal deadlines.", kind: "long_text", required: false },
+  { id: "gg4", prompt: "Has the other party been contacted about this issue?", whyAsking: "Some local procedures expect a conferral attempt; your answer is recorded as fact, not judged.", kind: "boolean", required: true },
+  { id: "gg5", prompt: "Is there a known deadline?", whyAsking: "Deadlines you know about are tracked as user-entered dates only.", kind: "date", required: false },
+  { id: "gg6", prompt: "Is a hearing already scheduled?", whyAsking: "Several package components change depending on whether a hearing exists.", kind: "boolean", required: true },
+  { id: "gg7", prompt: "Add any facts, background, concerns, or instructions that were not covered above.", whyAsking: "Anything you add here is labeled user-provided and stays under your control.", kind: "long_text", required: false },
+];
+
+export function questionBankFor(taskType: string): GuidedQuestion[] {
+  return taskType === "temporary_relief" ? SCHOOL_RELIEF_QUESTIONS : GENERIC_QUESTIONS;
+}
+
 // Fact review table (Step 4).
 export const MOCK_FACT_CANDIDATES: FactCandidate[] = [
   { id: "fc1", text: "A Temporary Custody Order was entered on January 15, 2026, addressing timesharing.", sourceType: "order", sourceLabel: "Court Order: Temporary Custody Order", sourceDate: "2026-01-15", support: "directly_supported", conflictNote: null, decision: "pending" },

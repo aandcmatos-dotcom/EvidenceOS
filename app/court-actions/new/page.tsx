@@ -2,24 +2,68 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import Disclaimer from "@/components/shared/Disclaimer";
 import DocumentOptionCard from "@/components/court-actions/DocumentOptionCard";
+import { useAuth } from "@/contexts/AuthContext";
+import { createAction } from "@/lib/db/court-actions";
 import { intakeSituation, type IntakeResult } from "@/lib/services/situationIntakeService";
 import { COMMON_SITUATIONS, NOT_SURE_OPTIONS } from "@/lib/mock/court-actions";
+import type { CourtActionTaskType } from "@/lib/court-actions/types";
 import { MessageSquareText, ArrowRight, ChevronLeft, AlertTriangle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Neutral mapping from a document-definition card to the action task type it explores.
+const DEFINITION_TASK_TYPE: Record<string, CourtActionTaskType> = {
+  "def-motion-temporary": "temporary_relief",
+  "def-motion-contempt": "enforcement",
+  "def-response-motion": "respond_to_motion",
+  "def-affidavit": "temporary_relief",
+  "def-proposed-order": "proposed_order",
+  "def-notice-hearing": "hearing_prep",
+  "def-witness-list": "hearing_prep",
+  "def-exhibit-list": "exhibit_packet",
+  "def-exam-questions": "exam_questions",
+  "def-hearing-summary": "summary",
+  "def-filing-checklist": "procedural_checklist",
+};
+
 export default function TellUsPage() {
+  const router = useRouter();
+  const { user, activeCase } = useAuth();
   const [picked, setPicked] = useState<string | null>(null);
   const [freeText, setFreeText] = useState("");
   const [result, setResult] = useState<IntakeResult | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   const description = picked ?? freeText;
 
   const submit = () => {
     if (!description.trim()) return;
     setResult(intakeSituation(description));
+  };
+
+  const explore = async (definitionId: string, definitionName: string) => {
+    if (!user || !activeCase) { setCreateError("Select or create a case first."); return; }
+    setCreating(true);
+    setCreateError("");
+    try {
+      const created = await createAction({
+        case_id: activeCase.id,
+        created_by: user.id,
+        title: description.trim().slice(0, 80) || definitionName,
+        task_type: DEFINITION_TASK_TYPE[definitionId] ?? "summary",
+        status: "in_progress",
+        step: 1,
+        free_text: description.trim() || null,
+      });
+      router.push(`/court-actions/${created.id}`);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Could not create the action.");
+      setCreating(false);
+    }
   };
 
   return (
@@ -93,6 +137,14 @@ export default function TellUsPage() {
             </p>
           </div>
 
+          {createError && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+              <AlertTriangle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-red-700">{createError}</p>
+            </div>
+          )}
+          {creating && <p className="text-sm text-gray-400 mb-4">Creating your action…</p>}
+
           {result.matches.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
               <p className="text-gray-500 text-sm mb-2">No matching document categories were found for that description.</p>
@@ -101,7 +153,8 @@ export default function TellUsPage() {
           ) : (
             <div className="grid grid-cols-2 gap-4 mb-6">
               {result.matches.map(({ definition, matchedKeywords }) => (
-                <DocumentOptionCard key={definition.id} definition={definition} matchedKeywords={matchedKeywords} />
+                <DocumentOptionCard key={definition.id} definition={definition} matchedKeywords={matchedKeywords}
+                  onExplore={(defId) => explore(defId, definition.name)} />
               ))}
             </div>
           )}

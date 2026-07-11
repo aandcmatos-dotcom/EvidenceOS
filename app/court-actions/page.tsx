@@ -1,16 +1,23 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import AppLayout from "@/components/AppLayout";
 import Disclaimer from "@/components/shared/Disclaimer";
 import AssistantLauncher from "@/components/assistant/AssistantLauncher";
 import StatusBadge from "@/components/court-actions/StatusBadge";
-import { MOCK_ACTIONS } from "@/lib/mock/court-actions";
-import { TASK_TYPE_LABEL } from "@/lib/court-actions/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { getActions } from "@/lib/db/court-actions";
+import { TASK_TYPE_LABEL, type CourtActionTaskType, type ActionStatus } from "@/lib/court-actions/types";
 import {
   Gavel, MessageSquareText, CalendarClock, Reply, FileSearch,
   ListChecks, HelpCircle, FolderOpen, FileText, ClipboardCheck, ArrowRight, Play,
 } from "lucide-react";
+
+interface ActionListRow {
+  id: string; title: string; task_type: CourtActionTaskType;
+  status: ActionStatus; step: number; updated_at: string;
+}
 
 const CARDS = [
   { href: "/court-actions/new", icon: MessageSquareText, title: "Describe what is happening", desc: "Plain-language guided entry — start here if you're not sure what you need.", accent: true },
@@ -22,20 +29,43 @@ const CARDS = [
   { href: "/exhibits", icon: FolderOpen, title: "Build an exhibit packet", desc: "Index, coversheets, and a combined packet from your evidence." },
   { href: "/reports", icon: FileText, title: "Generate a summary", desc: "Case, event, and evidence summaries from your records." },
   { href: "/document-review", icon: ClipboardCheck, title: "Review a document", desc: "Source, citation, procedure, and writing checks." },
-  { href: "/court-actions/act-1", icon: ListChecks, title: "View filing checklists", desc: "Procedural task lists with per-item source labels." },
+  { href: "/references", icon: ListChecks, title: "Manage references", desc: "Assign rules and procedures that drive checklists and citations." },
 ];
 
 export default function CourtActionsPage() {
+  const { activeCase } = useAuth();
+  const [actions, setActions] = useState<ActionListRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchActions = useCallback(async () => {
+    if (!activeCase) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const data = await getActions(activeCase.id);
+      setActions((data ?? []) as unknown as ActionListRow[]);
+    } catch {
+      setActions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCase]);
+
+  useEffect(() => { fetchActions(); }, [fetchActions]);
+
   return (
     <AppLayout title="Court Actions">
       <div className="mb-5"><Disclaimer compact /></div>
 
       {/* Continue an action */}
-      {MOCK_ACTIONS.length > 0 && (
-        <div className="mb-6">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Continue an action</p>
+      <div className="mb-6">
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Continue an action</p>
+        {loading ? (
+          <p className="text-sm text-gray-400">Loading actions…</p>
+        ) : actions.length === 0 ? (
+          <p className="text-sm text-gray-400">No actions yet — start below by describing what is happening.</p>
+        ) : (
           <div className="grid grid-cols-2 gap-4">
-            {MOCK_ACTIONS.map((a) => (
+            {actions.map((a) => (
               <Link key={a.id} href={`/court-actions/${a.id}`}
                 className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md hover:border-purple-200 transition-all group">
                 <div className="flex items-start justify-between gap-3 mb-2">
@@ -45,7 +75,7 @@ export default function CourtActionsPage() {
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-semibold text-gray-900 group-hover:text-purple-700 transition-colors">{a.title}</h3>
-                      <p className="text-xs text-gray-400">{TASK_TYPE_LABEL[a.taskType]} · step {a.step} of 10 · updated {a.updatedAt}</p>
+                      <p className="text-xs text-gray-400">{TASK_TYPE_LABEL[a.task_type]} · step {a.step} of 10 · updated {new Date(a.updated_at).toLocaleDateString()}</p>
                     </div>
                   </div>
                   <StatusBadge status={a.status} />
@@ -56,8 +86,8 @@ export default function CourtActionsPage() {
               </Link>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Start something</p>
       <div className="grid grid-cols-2 gap-4">
