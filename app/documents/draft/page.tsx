@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppLayout from "@/components/AppLayout";
 import Disclaimer from "@/components/shared/Disclaimer";
 import { SupportBadge } from "@/components/shared/badges";
-import { MOCK_TEMPLATES, MOCK_QUESTIONS } from "@/lib/mock/documents";
-import { MOCK_SOURCES } from "@/lib/mock/sources";
+import { useAuth } from "@/contexts/AuthContext";
+import { getTemplates, createDocument, addDocumentSources, saveDocumentVersion, recordExport } from "@/lib/db/documents";
+import { getSelectableSources } from "@/lib/db/sources";
+import { logAudit } from "@/lib/db/audit";
+import { MOCK_QUESTIONS } from "@/lib/mock/documents";
+import type { SelectableSource } from "@/lib/mock/sources";
 import { generateDraft } from "@/lib/services/documentDraftingService";
 import { exportDocx, exportPDF, exportText, copyToClipboard, type ExportDoc } from "@/lib/documents/export";
 import { detectSensitive, applyRedactions, SENSITIVE_LABEL } from "@/lib/security/redaction";
@@ -24,6 +28,8 @@ const STEPS = [
   "Source Verification", "Review", "Export",
 ];
 
+interface TemplateRow { id: string; name: string; category: string; description: string | null; built_in: boolean }
+
 export default function DraftPageWrapper() {
   return (
     <Suspense fallback={<AppLayout title="Draft Document"><div className="py-16 text-center text-gray-400 text-sm">Loading…</div></AppLayout>}>
@@ -35,18 +41,38 @@ export default function DraftPageWrapper() {
 function DraftPage() {
   const params = useSearchParams();
   const presetTemplate = params.get("template");
+  const { user, activeCase } = useAuth();
 
   const [step, setStep] = useState(1);
+  const [title, setTitle] = useState("");
+  const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [templateId, setTemplateId] = useState<string | null>(presetTemplate);
   const [blank, setBlank] = useState(false);
+  const [sources, setSources] = useState<SelectableSource[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [questions, setQuestions] = useState<UserQuestion[]>(MOCK_QUESTIONS.map((q) => ({ ...q })));
   const [statements, setStatements] = useState<DraftStatement[]>([]);
   const [generated, setGenerated] = useState(false);
   const [confirmations, setConfirmations] = useState<boolean[]>(REVIEW_CONFIRMATIONS.map(() => false));
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    getTemplates(user.id).then((data) => setTemplates((data ?? []) as unknown as TemplateRow[])).catch(() => setTemplates([]));
+  }, [user]);
+
+  useEffect(() => {
+    if (!activeCase || !user) { setSourcesLoading(false); return; }
+    setSourcesLoading(true);
+    getSelectableSources(activeCase.id, user.id)
+      .then(setSources)
+      .finally(() => setSourcesLoading(false));
+  }, [activeCase, user]);
 
   const canProceed = () => {
-    if (step === 1) return blank || !!templateId;
+    if (step === 1) return (blank || !!templateId) && title.trim() !== "";
     if (step === 3) return questions.filter((q) => q.required).every((q) => (q.answer ?? "").trim() !== "");
     if (step === 6) return confirmations.every(Boolean);
     return true;
@@ -55,102 +81,173 @@ function DraftPage() {
   const next = () => setStep((s) => Math.min(s + 1, 7));
   const back = () => setStep((s) => Math.max(s - 1, 1));
 
+  // Persist the generated document + its sources once the draft exists, so the
+  // review/export steps and the My Documents list reflect real, saved data.
+  const persistDocument = useCallback(async (finalStatements: DraftStatement[]) => {
+    if (!activeCase || !user) return null;
+    setSaveError("");
+    try {
+      const tpl = templates.find((t) => t.id === templateId);
+      const doc = await createDocument({
+        case_id: activeCase.id,
+        created_by: user.id,
+        template_id: templateId,
+        title: title.trim() || "Untitled Document",
+        category: tpl?.category ?? "Custom Document",
+        status: "draft",
+        body: finalStatements,
+        version: 1,
+      });
+      const docRow = doc as { id: string };
+      await addDocumentSources(docRow.id, finalStatements.flatMap((s) =>
+        s.sources.map((src) => ({
+          sourceType: src.sourceType, sourceId: src.sourceId, refVersion: null, excerpt: src.excerpt ?? null,
+        }))
+      ));
+      await saveDocumentVersion({
+        documentId: docRow.id, version: 1, body: finalStatements,
+        sourcesSnapshot: finalStatements.flatMap((s) => s.sources), referenceVersionsSnapshot: [],
+        createdBy: user.id,
+      });
+      await logAudit({ userId: user.id, caseId: activeCase.id, action: "document.create", entityType: "generated_documents", entityId: docRow.id });
+      setDocumentId(docRow.id);
+      return docRow.id;
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save the document.");
+      return null;
+    }
+  }, [activeCase, user, templates, templateId, title]);
+
   return (
     <AppLayout title="Draft Document">
       <div className="mb-5"><Disclaimer compact /></div>
 
-      {/* Stepper */}
-      <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-2">
-        {STEPS.map((label, i) => {
-          const n = i + 1;
-          const done = n < step, active = n === step;
-          return (
-            <div key={label} className="flex items-center flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2",
-                  done ? "bg-purple-600 border-purple-600 text-white" :
-                  active ? "bg-white border-purple-600 text-purple-600" : "bg-white border-gray-200 text-gray-400")}>
-                  {done ? <Check size={13} /> : n}
+      {!activeCase ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+          <p className="text-gray-500">Select or create a case before drafting a document.</p>
+        </div>
+      ) : (
+        <>
+          {/* Stepper */}
+          <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-2">
+            {STEPS.map((label, i) => {
+              const n = i + 1;
+              const done = n < step, active = n === step;
+              return (
+                <div key={label} className="flex items-center flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2",
+                      done ? "bg-purple-600 border-purple-600 text-white" :
+                      active ? "bg-white border-purple-600 text-purple-600" : "bg-white border-gray-200 text-gray-400")}>
+                      {done ? <Check size={13} /> : n}
+                    </div>
+                    <span className={cn("text-xs font-medium whitespace-nowrap", active ? "text-purple-700" : done ? "text-gray-600" : "text-gray-400")}>{label}</span>
+                  </div>
+                  {n < STEPS.length && <div className="w-6 h-px bg-gray-200 mx-2" />}
                 </div>
-                <span className={cn("text-xs font-medium whitespace-nowrap", active ? "text-purple-700" : done ? "text-gray-600" : "text-gray-400")}>{label}</span>
-              </div>
-              {n < STEPS.length && <div className="w-6 h-px bg-gray-200 mx-2" />}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 min-h-[380px]">
-        {step === 1 && <Step1 templateId={templateId} setTemplateId={(id) => { setTemplateId(id); setBlank(false); }} blank={blank} setBlank={() => { setBlank(true); setTemplateId(null); }} />}
-        {step === 2 && <Step2 selected={selectedSources} setSelected={setSelectedSources} />}
-        {step === 3 && <Step3 questions={questions} setQuestions={setQuestions} />}
-        {step === 4 && <Step4 generated={generated} onGenerate={() => { setStatements(buildDraft(selectedSources, questions)); setGenerated(true); }} statements={statements} />}
-        {step === 5 && <Step5 statements={statements} />}
-        {step === 6 && <Step6 confirmations={confirmations} setConfirmations={setConfirmations} statements={statements} />}
-        {step === 7 && <Step7 statements={statements} />}
-      </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 min-h-[380px]">
+            {step === 1 && (
+              <Step1 title={title} setTitle={setTitle} templates={templates}
+                templateId={templateId} setTemplateId={(id) => { setTemplateId(id); setBlank(false); }}
+                blank={blank} setBlank={() => { setBlank(true); setTemplateId(null); }} />
+            )}
+            {step === 2 && <Step2 sources={sources} loading={sourcesLoading} selected={selectedSources} setSelected={setSelectedSources} />}
+            {step === 3 && <Step3 questions={questions} setQuestions={setQuestions} />}
+            {step === 4 && (
+              <Step4 generated={generated} saveError={saveError}
+                onGenerate={async () => {
+                  const built = buildDraft(selectedSources, questions, sources);
+                  setStatements(built);
+                  setGenerated(true);
+                  await persistDocument(built);
+                }}
+                statements={statements} />
+            )}
+            {step === 5 && <Step5 statements={statements} />}
+            {step === 6 && <Step6 confirmations={confirmations} setConfirmations={setConfirmations} statements={statements} />}
+            {step === 7 && <Step7 statements={statements} title={title} documentId={documentId} userId={user?.id ?? null} />}
+          </div>
 
-      {/* Nav */}
-      <div className="flex justify-between mt-5">
-        {step > 1 ? (
-          <button onClick={back} className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-            <ChevronLeft size={15} /> Back
-          </button>
-        ) : (
-          <Link href="/documents" className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-            <ChevronLeft size={15} /> Cancel
-          </Link>
-        )}
-        {step < 7 && (
-          <button onClick={next} disabled={!canProceed() || (step === 4 && !generated)}
-            className="flex items-center gap-1.5 px-6 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            Continue <ChevronRight size={15} />
-          </button>
-        )}
-        {step === 7 && (
-          <Link href="/documents" className="px-6 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors">
-            Done
-          </Link>
-        )}
-      </div>
+          {/* Nav */}
+          <div className="flex justify-between mt-5">
+            {step > 1 ? (
+              <button onClick={back} className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                <ChevronLeft size={15} /> Back
+              </button>
+            ) : (
+              <Link href="/documents" className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                <ChevronLeft size={15} /> Cancel
+              </Link>
+            )}
+            {step < 7 && (
+              <button onClick={next} disabled={!canProceed() || (step === 4 && !generated)}
+                className="flex items-center gap-1.5 px-6 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                Continue <ChevronRight size={15} />
+              </button>
+            )}
+            {step === 7 && (
+              <Link href="/documents" className="px-6 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors">
+                Done
+              </Link>
+            )}
+          </div>
+        </>
+      )}
     </AppLayout>
   );
 }
 
 // ── Step 1 ──────────────────────────────────────────────────────────────────
-function Step1({ templateId, setTemplateId, blank, setBlank }: {
+function Step1({ title, setTitle, templates, templateId, setTemplateId, blank, setBlank }: {
+  title: string; setTitle: (v: string) => void; templates: TemplateRow[];
   templateId: string | null; setTemplateId: (id: string) => void; blank: boolean; setBlank: () => void;
 }) {
   return (
     <div>
       <h2 className="text-lg font-bold text-gray-900 mb-1">Select a document type</h2>
-      <p className="text-sm text-gray-500 mb-5">Start from a template or a blank document. No template is pre-approved or certified as court-compliant.</p>
+      <p className="text-sm text-gray-500 mb-4">Start from a template or a blank document. No template is pre-approved or certified as court-compliant.</p>
+
+      <div className="mb-5">
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Document Title <span className="text-red-400">*</span></label>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Declaration re: April Custody Exchanges"
+          className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400" />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <button onClick={setBlank}
           className={cn("text-left p-4 rounded-xl border-2 transition-all", blank ? "border-purple-600 bg-purple-50" : "border-gray-200 hover:border-purple-300")}>
           <div className="flex items-center gap-2 mb-1"><FileText size={16} className="text-purple-600" /><span className="text-sm font-semibold text-gray-900">Blank document</span></div>
           <p className="text-xs text-gray-500">Start from scratch and add your own sections.</p>
         </button>
-        {MOCK_TEMPLATES.map((t) => (
+        {templates.map((t) => (
           <button key={t.id} onClick={() => setTemplateId(t.id)}
             className={cn("text-left p-4 rounded-xl border-2 transition-all", templateId === t.id ? "border-purple-600 bg-purple-50" : "border-gray-200 hover:border-purple-300")}>
             <div className="flex items-center gap-2 mb-1"><FileText size={16} className="text-purple-600" /><span className="text-sm font-semibold text-gray-900">{t.name}</span></div>
             <p className="text-xs text-gray-500">{t.description}</p>
           </button>
         ))}
+        {templates.length === 0 && (
+          <p className="text-xs text-gray-400 col-span-2">No templates found. Run migration 005_seed_templates.sql in Supabase, or start from a blank document.</p>
+        )}
       </div>
     </div>
   );
 }
 
 // ── Step 2 ──────────────────────────────────────────────────────────────────
-function Step2({ selected, setSelected }: { selected: string[]; setSelected: (s: string[]) => void }) {
+function Step2({ sources, loading, selected, setSelected }: {
+  sources: SelectableSource[]; loading: boolean; selected: string[]; setSelected: (s: string[]) => void;
+}) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const types = ["All", "event", "evidence", "communication", "order", "person", "reference"];
   const toggle = (id: string) => setSelected(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
 
-  const filtered = MOCK_SOURCES.filter((s) => {
+  const filtered = sources.filter((s) => {
     if (typeFilter !== "All" && s.sourceType !== typeFilter) return false;
     if (search && !s.label.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -172,24 +269,30 @@ function Step2({ selected, setSelected }: { selected: string[]; setSelected: (s:
         </select>
       </div>
       <p className="text-xs text-gray-400 mb-3">{selected.length} selected</p>
-      <div className="space-y-2 max-h-[280px] overflow-y-auto">
-        {filtered.map((s) => (
-          <label key={s.id} className={cn("flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors",
-            selected.includes(s.id) ? "border-purple-300 bg-purple-50/50" : "border-gray-100 hover:bg-gray-50")}>
-            <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)}
-              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900">{s.label}</p>
-              <p className="text-xs text-gray-400">{s.sublabel}{s.date ? ` · ${s.date}` : ""}</p>
-            </div>
-            {!s.verified && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 flex items-center gap-1">
-                <AlertTriangle size={9} /> Needs verification
-              </span>
-            )}
-          </label>
-        ))}
-      </div>
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-8">Loading your case records…</p>
+      ) : sources.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-8">No records found in this case yet. Add evidence, timeline events, or other records first.</p>
+      ) : (
+        <div className="space-y-2 max-h-[280px] overflow-y-auto">
+          {filtered.map((s) => (
+            <label key={s.id} className={cn("flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors",
+              selected.includes(s.id) ? "border-purple-300 bg-purple-50/50" : "border-gray-100 hover:bg-gray-50")}>
+              <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)}
+                className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">{s.label}</p>
+                <p className="text-xs text-gray-400">{s.sublabel}{s.date ? ` · ${s.date}` : ""}</p>
+              </div>
+              {!s.verified && (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 flex items-center gap-1">
+                  <AlertTriangle size={9} /> Needs verification
+                </span>
+              )}
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -238,9 +341,11 @@ function Step3({ questions, setQuestions }: { questions: UserQuestion[]; setQues
 }
 
 // ── Step 4 ──────────────────────────────────────────────────────────────────
-function Step4({ generated, onGenerate, statements }: { generated: boolean; onGenerate: () => void; statements: DraftStatement[] }) {
+function Step4({ generated, onGenerate, statements, saveError }: {
+  generated: boolean; onGenerate: () => void | Promise<void>; statements: DraftStatement[]; saveError: string;
+}) {
   const [busy, setBusy] = useState(false);
-  const run = () => { setBusy(true); setTimeout(() => { onGenerate(); setBusy(false); }, 1100); };
+  const run = async () => { setBusy(true); await onGenerate(); setBusy(false); };
   if (!generated) {
     return (
       <div className="text-center py-10">
@@ -261,6 +366,12 @@ function Step4({ generated, onGenerate, statements }: { generated: boolean; onGe
     <div>
       <h2 className="text-lg font-bold text-gray-900 mb-1">Draft generated</h2>
       <p className="text-sm text-gray-500 mb-4">Review the draft below. Continue to verify each statement&apos;s source.</p>
+      {saveError && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+          <AlertTriangle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-red-700">Draft generated, but saving to your case failed: {saveError}</p>
+        </div>
+      )}
       <div className="border border-gray-100 rounded-xl p-5 bg-gray-50/50 space-y-2 text-sm text-gray-800 leading-relaxed">
         {statements.map((s, i) => (
           <p key={s.id}><span className="text-gray-400 mr-1">{i + 1}.</span>{s.text}</p>
@@ -348,7 +459,9 @@ function Step6({ confirmations, setConfirmations, statements }: {
 }
 
 // ── Step 7 ──────────────────────────────────────────────────────────────────
-function Step7({ statements }: { statements: DraftStatement[] }) {
+function Step7({ statements, title, documentId, userId }: {
+  statements: DraftStatement[]; title: string; documentId: string | null; userId: string | null;
+}) {
   const [attested, setAttested] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
@@ -361,7 +474,6 @@ function Step7({ statements }: { statements: DraftStatement[] }) {
     : statements.map((s) => {
         const local = detectSensitive(s.text);
         const approvedLocal = local.filter((m) => {
-          // approve if the corresponding global match index is approved
           const globalIdx = sensitive.findIndex((g) => g.text === m.text);
           return redactApproved.has(globalIdx);
         });
@@ -369,7 +481,7 @@ function Step7({ statements }: { statements: DraftStatement[] }) {
       });
 
   const buildExportDoc = (): ExportDoc => ({
-    title: "Draft Document",
+    title: title || "Draft Document",
     statements: exportStatements,
     signatureBlock: "Respectfully submitted,\n\n_______________________________\n(Signature)",
   });
@@ -380,6 +492,9 @@ function Step7({ statements }: { statements: DraftStatement[] }) {
     else if (id === "PDF") exportPDF(doc);
     else if (id === "TXT") exportText(doc);
     else if (id === "COPY") { const ok = await copyToClipboard(doc); if (!ok) { alert("Could not copy."); return; } }
+    if (documentId && userId) {
+      try { await recordExport({ documentId, format: id, exportedBy: userId, attested }); } catch { /* export already happened locally */ }
+    }
     setDone(id); setTimeout(() => setDone(null), 2500);
   };
 
@@ -440,15 +555,15 @@ function Step7({ statements }: { statements: DraftStatement[] }) {
   );
 }
 
-// Draft via the schema-validated, guard-checked service (Phase 3). Maps the structured
-// StructuredStatement output to the UI's DraftStatement shape for display.
-function buildDraft(selectedIds: string[], questions: UserQuestion[]): DraftStatement[] {
+// Draft via the schema-validated, guard-checked service (Phase 3), run against the
+// case's real records. Maps StructuredStatement output to the UI's DraftStatement shape.
+function buildDraft(selectedIds: string[], questions: UserQuestion[], sourcePool: SelectableSource[]): DraftStatement[] {
   const answers: Record<string, string> = {};
   questions.forEach((q) => { if (q.answer) answers[q.id] = q.answer; });
 
   const result = generateDraft(
     { caseId: "current", templateId: null, selectedSourceIds: selectedIds, answers, jurisdiction: null },
-    MOCK_SOURCES,
+    sourcePool,
   );
 
   return result.statements.map((s, i) => ({
@@ -456,7 +571,7 @@ function buildDraft(selectedIds: string[], questions: UserQuestion[]): DraftStat
     text: s.statement,
     status: s.status,
     sources: s.sourceIds.map((id, j) => {
-      const src = MOCK_SOURCES.find((m) => m.id === id);
+      const src = sourcePool.find((m) => m.id === id);
       return {
         sourceType: src?.sourceType ?? "user_answer",
         sourceId: id,

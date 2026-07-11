@@ -16,7 +16,7 @@ npm install          # no new dependencies were added, but this is safe to run
 
 ## 2. Run the database migrations in Supabase
 
-Open **Supabase → SQL Editor → New query**. Run these **two** files, in order. Both are
+Open **Supabase → SQL Editor → New query**. Run these **three** files, in order. All are
 idempotent (safe to run more than once). Copy the full contents of each file from the repo:
 
 1. `supabase/migrations/003_documents_references_reviews.sql`
@@ -27,9 +27,14 @@ idempotent (safe to run more than once). Copy the full contents of each file fro
    — adds audit / file-access / export / AI-request / redaction logging tables, and consent +
    retention columns on `profiles`.
 
-> If you're setting up a brand-new Supabase project from scratch, run `001`, `002`, `003`, `004`
-> in that order. If your project is already live (you've been using the app), you only need `003`
-> and `004` — the earlier ones already ran.
+3. `supabase/migrations/005_seed_templates.sql`
+   — seeds the 6 built-in document templates (Declaration, Chronology, Exhibit List, etc.) so the
+   Documents → Templates tab and the draft wizard have real rows to show. Without this, "Draft New
+   Document" still works — you'll just start from a blank document until you seed templates.
+
+> If you're setting up a brand-new Supabase project from scratch, run `001`, `002`, `003`, `004`,
+> `005` in that order. If your project is already live (you've been using the app), you only need
+> `003`, `004`, `005` — the earlier ones already ran.
 
 **Verify it worked** — run this and confirm you see the new tables, all with `rowsecurity = t`:
 
@@ -40,6 +45,14 @@ where schemaname='public'
                     'review_findings','ai_conversations','audit_logs','export_history')
 order by tablename;
 ```
+
+Then confirm the templates seeded:
+
+```sql
+select name, category, built_in from document_templates order by name;
+```
+
+You should see 6 rows, all `built_in = true`.
 
 That's the **only** Supabase work required. No new storage buckets, no new policies to click
 through by hand — the migrations create every table, index, foreign key, and RLS policy for you.
@@ -111,10 +124,22 @@ conflict surfacing, review findings, and sensitive-data redaction. You should se
 
 ## Current data state
 
-The four new modules currently render from **illustrative sample data** so you can see and use the
-full workflow immediately. The database schema, RLS, and all provenance/versioning tables from
-step 2 are live and validated; wiring each module's create/read/update to those tables (replacing
-the sample data, exactly like we did earlier for Evidence, Timeline, etc.) is the next increment.
+All four modules are now wired to real Supabase data, scoped to your active case:
+
+- **Documents**: templates load from `document_templates`; the draft wizard pulls real timeline
+  events, evidence, communications, court orders, people, and assigned references as source
+  material; generated drafts are saved to `generated_documents` with full source provenance
+  (`document_sources`) and a version snapshot (`document_versions`); exports are logged.
+- **References**: create, search, verify, and assign references to your case; verifying one writes
+  a `verification_records` entry and updates the reference's status and last-verified date.
+- **Document Review**: run a review against any saved document (or pasted text) using your case's
+  assigned references — the review and every finding are persisted, and marking a finding
+  Accept/Edit/Dismiss/Attorney-review saves that decision.
+
+Two things intentionally still use local/mock behavior since they weren't part of this pass:
+uploading a reference **file** (PDF/DOCX) — use "Manual citation" or "Paste text" for now — and
+the AI Assistant panel's chat, which runs the deterministic Phase 3 service rather than persisting
+conversations to `ai_conversations`/`ai_messages` yet.
 
 ## Safety model (why this is not "legal advice" software)
 
