@@ -7,6 +7,7 @@ import { validateCitations, extractCitations } from "@/lib/services/citationVali
 import { retrieveReferences } from "@/lib/services/referenceSearchService";
 import { generateDraft } from "@/lib/services/documentDraftingService";
 import { runReview } from "@/lib/services/documentReviewService";
+import { detectSensitive, applyRedactions } from "@/lib/security/redaction";
 import { MOCK_REFERENCES } from "@/lib/mock/references";
 import { MOCK_SOURCES } from "@/lib/mock/sources";
 import type { StructuredStatement } from "@/lib/ai/schema";
@@ -106,6 +107,20 @@ console.log("\n[documentReview]");
   check("review flags evidence foundation concern", review.findings.some((f) => f.category === "evidence_foundation"));
   check("review flags emotional 'always' language", review.findings.some((f) => f.category === "writing_quality"));
   check("summary counts match findings length", review.summary.possibleIssues === review.findings.length);
+}
+
+console.log("\n[redaction]");
+{
+  const text = "Contact me at jane.doe@email.com or (407) 555-1234. SSN 123-45-6789. DOB: 01/02/2015.";
+  const hits = detectSensitive(text);
+  check("detects email", hits.some((h) => h.kind === "email"));
+  check("detects phone", hits.some((h) => h.kind === "phone"));
+  check("detects SSN", hits.some((h) => h.kind === "ssn"));
+  check("detects minor DOB with context", hits.some((h) => h.kind === "minor_dob"));
+  check("does not flag a plain non-sensitive sentence", detectSensitive("The exchange occurred on April 15.").length === 0);
+  const ssnOnly = hits.filter((h) => h.kind === "ssn");
+  const redacted = applyRedactions(text, ssnOnly);
+  check("applies only approved redactions (SSN gone, email kept)", !redacted.includes("123-45-6789") && redacted.includes("jane.doe@email.com"));
 }
 
 console.log(`\n${failed === 0 ? "✅ ALL PASS" : "❌ FAILURES"} — ${passed} passed, ${failed} failed\n`);

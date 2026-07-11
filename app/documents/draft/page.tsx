@@ -9,6 +9,8 @@ import { SupportBadge } from "@/components/shared/badges";
 import { MOCK_TEMPLATES, MOCK_QUESTIONS } from "@/lib/mock/documents";
 import { MOCK_SOURCES } from "@/lib/mock/sources";
 import { generateDraft } from "@/lib/services/documentDraftingService";
+import { exportDocx, exportPDF, exportText, copyToClipboard, type ExportDoc } from "@/lib/documents/export";
+import { detectSensitive, applyRedactions, SENSITIVE_LABEL } from "@/lib/security/redaction";
 import type { DraftStatement, UserQuestion } from "@/lib/documents/types";
 import { REVIEW_CONFIRMATIONS, EXPORT_ATTESTATION } from "@/lib/disclaimers";
 import {
@@ -85,7 +87,7 @@ function DraftPage() {
         {step === 4 && <Step4 generated={generated} onGenerate={() => { setStatements(buildDraft(selectedSources, questions)); setGenerated(true); }} statements={statements} />}
         {step === 5 && <Step5 statements={statements} />}
         {step === 6 && <Step6 confirmations={confirmations} setConfirmations={setConfirmations} statements={statements} />}
-        {step === 7 && <Step7 />}
+        {step === 7 && <Step7 statements={statements} />}
       </div>
 
       {/* Nav */}
@@ -346,19 +348,74 @@ function Step6({ confirmations, setConfirmations, statements }: {
 }
 
 // ── Step 7 ──────────────────────────────────────────────────────────────────
-function Step7() {
+function Step7({ statements }: { statements: DraftStatement[] }) {
   const [attested, setAttested] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+
+  const docText = statements.map((s) => s.text).join("\n");
+  const sensitive = detectSensitive(docText);
+  const [redactApproved, setRedactApproved] = useState<Set<number>>(new Set());
+
+  const exportStatements: DraftStatement[] = sensitive.length === 0 || redactApproved.size === 0
+    ? statements
+    : statements.map((s) => {
+        const local = detectSensitive(s.text);
+        const approvedLocal = local.filter((m) => {
+          // approve if the corresponding global match index is approved
+          const globalIdx = sensitive.findIndex((g) => g.text === m.text);
+          return redactApproved.has(globalIdx);
+        });
+        return { ...s, text: approvedLocal.length ? applyRedactions(s.text, approvedLocal) : s.text };
+      });
+
+  const buildExportDoc = (): ExportDoc => ({
+    title: "Draft Document",
+    statements: exportStatements,
+    signatureBlock: "Respectfully submitted,\n\n_______________________________\n(Signature)",
+  });
+
+  const run = async (id: string) => {
+    const doc = buildExportDoc();
+    if (id === "DOCX") exportDocx(doc);
+    else if (id === "PDF") exportPDF(doc);
+    else if (id === "TXT") exportText(doc);
+    else if (id === "COPY") { const ok = await copyToClipboard(doc); if (!ok) { alert("Could not copy."); return; } }
+    setDone(id); setTimeout(() => setDone(null), 2500);
+  };
+
   const formats = [
     { id: "DOCX", icon: <FileType size={18} className="text-blue-600" />, label: "Word (DOCX)" },
     { id: "PDF", icon: <Download size={18} className="text-red-600" />, label: "PDF" },
     { id: "TXT", icon: <FileText size={18} className="text-gray-600" />, label: "Plain text" },
     { id: "COPY", icon: <Copy size={18} className="text-purple-600" />, label: "Copy to clipboard" },
   ];
+
   return (
     <div>
       <h2 className="text-lg font-bold text-gray-900 mb-1">Export</h2>
       <p className="text-sm text-gray-500 mb-4">Choose a format. Captions, headings, signature blocks, exhibit references, and citations are preserved.</p>
+
+      {sensitive.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+          <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5 mb-2">
+            <AlertTriangle size={14} /> {sensitive.length} possible sensitive item{sensitive.length !== 1 ? "s" : ""} detected
+          </p>
+          <p className="text-xs text-red-700 mb-3">Nothing is redacted unless you check it. Review each and choose what to redact before export.</p>
+          <div className="space-y-1.5">
+            {sensitive.map((m, i) => (
+              <label key={i} className="flex items-center gap-2 text-xs bg-white border border-red-100 rounded-lg px-2.5 py-1.5 cursor-pointer">
+                <input type="checkbox" checked={redactApproved.has(i)}
+                  onChange={(e) => setRedactApproved((prev) => { const n = new Set(prev); if (e.target.checked) n.add(i); else n.delete(i); return n; })}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                <span className="font-medium text-gray-700">{SENSITIVE_LABEL[m.kind]}:</span>
+                <span className="font-mono text-gray-500">{m.text}</span>
+                <span className="text-gray-400 ml-auto">→ {m.suggestedReplacement}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <label className="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50 cursor-pointer mb-4">
         <input type="checkbox" checked={attested} onChange={(e) => setAttested(e.target.checked)}
           className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 mt-0.5" />
@@ -366,7 +423,7 @@ function Step7() {
       </label>
       <div className="grid grid-cols-2 gap-3">
         {formats.map((f) => (
-          <button key={f.id} disabled={!attested} onClick={() => { setDone(f.id); setTimeout(() => setDone(null), 2500); }}
+          <button key={f.id} disabled={!attested} onClick={() => run(f.id)}
             className={cn("flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed",
               done === f.id ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-purple-300")}>
             <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center flex-shrink-0">{f.icon}</div>
@@ -377,7 +434,7 @@ function Step7() {
       </div>
       <div className="flex items-start gap-2 mt-4 text-xs text-gray-400">
         <Info size={13} className="mt-0.5 flex-shrink-0" />
-        <p>Real file generation (DOCX/PDF) is wired in a later phase. This preview records the export intent and attestation.</p>
+        <p>DOCX downloads as a Word-compatible document; PDF opens your browser&apos;s print dialog (choose &ldquo;Save as PDF&rdquo;).</p>
       </div>
     </div>
   );
