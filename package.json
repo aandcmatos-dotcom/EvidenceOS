@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:phase3": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/phase3.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

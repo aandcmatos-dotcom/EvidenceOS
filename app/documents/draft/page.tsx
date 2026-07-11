@@ -8,6 +8,7 @@ import Disclaimer from "@/components/shared/Disclaimer";
 import { SupportBadge } from "@/components/shared/badges";
 import { MOCK_TEMPLATES, MOCK_QUESTIONS } from "@/lib/mock/documents";
 import { MOCK_SOURCES } from "@/lib/mock/sources";
+import { generateDraft } from "@/lib/services/documentDraftingService";
 import type { DraftStatement, UserQuestion } from "@/lib/documents/types";
 import { REVIEW_CONFIRMATIONS, EXPORT_ATTESTATION } from "@/lib/disclaimers";
 import {
@@ -382,21 +383,29 @@ function Step7() {
   );
 }
 
-// Deterministic mock draft builder (Phase 1). Phase 3 replaces with a schema-validated service.
+// Draft via the schema-validated, guard-checked service (Phase 3). Maps the structured
+// StructuredStatement output to the UI's DraftStatement shape for display.
 function buildDraft(selectedIds: string[], questions: UserQuestion[]): DraftStatement[] {
-  const chosen = MOCK_SOURCES.filter((s) => selectedIds.includes(s.id));
-  const out: DraftStatement[] = [];
-  chosen.filter((s) => s.sourceType === "event" || s.sourceType === "evidence").forEach((s, i) => {
-    out.push({
-      id: `st-${i}`, text: `On ${s.date ?? "the recorded date"}, ${s.label.toLowerCase()} occurred as reflected in the case record.`,
-      status: s.verified ? "supported" : "needs_verification",
-      sources: [{ sourceType: s.sourceType, sourceId: s.id, label: s.label, excerpt: s.sublabel }],
-    });
-  });
-  const purpose = questions.find((q) => q.id === "q1")?.answer;
-  if (purpose) out.push({ id: "st-purpose", text: purpose, status: "user_entered", sources: [{ sourceType: "user_answer", sourceId: "q1", label: "Your answer: purpose" }] });
-  if (out.length === 0) {
-    out.push({ id: "st-empty", text: "No source materials were selected, so no factual statements could be drafted.", status: "no_source", sources: [] });
-  }
-  return out;
+  const answers: Record<string, string> = {};
+  questions.forEach((q) => { if (q.answer) answers[q.id] = q.answer; });
+
+  const result = generateDraft(
+    { caseId: "current", templateId: null, selectedSourceIds: selectedIds, answers, jurisdiction: null },
+    MOCK_SOURCES,
+  );
+
+  return result.statements.map((s, i) => ({
+    id: `st-${i}`,
+    text: s.statement,
+    status: s.status,
+    sources: s.sourceIds.map((id, j) => {
+      const src = MOCK_SOURCES.find((m) => m.id === id);
+      return {
+        sourceType: src?.sourceType ?? "user_answer",
+        sourceId: id,
+        label: src?.label ?? (id === "q1" ? "Your answer: purpose" : id),
+        excerpt: s.sourceExcerpts[j] || undefined,
+      };
+    }),
+  }));
 }
