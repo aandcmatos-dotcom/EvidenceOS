@@ -216,7 +216,7 @@ export default function EvidencePage() {
 
       const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean);
 
-      await supabase.from("evidence").insert({
+      const { error: insertError } = await supabase.from("evidence").insert({
         case_id: activeCase.id,
         uploaded_by: (await supabase.auth.getUser()).data.user?.id,
         title: form.title.trim(),
@@ -229,6 +229,7 @@ export default function EvidencePage() {
         tags: tags.length > 0 ? tags : null,
         status: form.status,
       } as never);
+      if (insertError) throw insertError;
 
       setForm({ title: "", category: "Other", date_of_document: "", notes: "", tags: "", status: "pending" });
       setSelectedFile(null);
@@ -247,12 +248,14 @@ export default function EvidencePage() {
     if (filePath) {
       await supabase.storage.from("evidence-files").remove([filePath]);
     }
-    await supabase.from("evidence").delete().eq("id", id);
+    const { error } = await supabase.from("evidence").delete().eq("id", id);
+    if (error) { alert(`Could not delete: ${error.message}`); return; }
     setEvidence((prev) => prev.filter((e) => e.id !== id));
   };
 
   const handleStatusChange = async (id: string, status: Status) => {
-    await supabase.from("evidence").update({ status } as never).eq("id", id);
+    const { error } = await supabase.from("evidence").update({ status } as never).eq("id", id);
+    if (error) { alert(`Could not update status: ${error.message}`); return; }
     setEvidence((prev) => prev.map((e) => e.id === id ? { ...e, status } : e));
   };
 

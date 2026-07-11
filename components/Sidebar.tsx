@@ -16,7 +16,6 @@ import {
   BarChart3,
   Settings,
   ChevronDown,
-  Zap,
   Shield,
   Sparkles,
   LogOut,
@@ -118,24 +117,8 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* Upgrade Card */}
-      <div className="px-4 pt-4 border-t border-purple-800/40">
-        <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap size={15} className="text-yellow-300" />
-            <span className="text-white text-xs font-bold uppercase tracking-wide">Upgrade to Pro</span>
-          </div>
-          <p className="text-purple-200 text-xs mb-3 leading-relaxed">
-            Unlimited evidence, AI insights, and hearing prep tools.
-          </p>
-          <button className="w-full bg-white text-purple-700 text-xs font-bold py-2 rounded-lg hover:bg-purple-50 transition-colors">
-            View Plans
-          </button>
-        </div>
-      </div>
-
       {/* User footer */}
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 border-t border-purple-800/40">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             {initials}

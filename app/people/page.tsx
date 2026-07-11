@@ -5,7 +5,7 @@ import AppLayout from "@/components/AppLayout";
 import Modal from "@/components/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Phone, Mail, FileText, Trash2, Users } from "lucide-react";
+import { Plus, Phone, Mail, Trash2, Users } from "lucide-react";
 
 const roleColors: Record<string, string> = {
   Petitioner: "bg-purple-100 text-purple-700",
@@ -56,7 +56,7 @@ export default function PeoplePage() {
     e.preventDefault();
     if (!activeCase || !form.name.trim()) return;
     setSaving(true);
-    await supabase.from("people").insert({
+    const { error } = await supabase.from("people").insert({
       case_id: activeCase.id,
       name: form.name.trim(),
       role: form.role,
@@ -64,9 +64,10 @@ export default function PeoplePage() {
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
     } as never);
+    setSaving(false);
+    if (error) { alert(`Could not save person: ${error.message}`); return; }
     setForm({ name: "", role: "Witness", relationship: "", phone: "", email: "" });
     setModalOpen(false);
-    setSaving(false);
     fetchPeople();
   };
 
@@ -135,11 +136,6 @@ export default function PeoplePage() {
                     <Mail size={12} /> {person.email}
                   </div>
                 )}
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
-                <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-purple-600 transition-colors">
-                  <FileText size={12} /> View Files
-                </button>
               </div>
             </div>
           ))}

@@ -70,7 +70,7 @@ export default function TimelinePage() {
     e.preventDefault();
     if (!activeCase || !form.title.trim() || !form.event_date) return;
     setSaving(true);
-    await supabase.from("timeline_events").insert({
+    const { error } = await supabase.from("timeline_events").insert({
       case_id: activeCase.id,
       title: form.title.trim(),
       description: form.description.trim() || null,
@@ -79,9 +79,10 @@ export default function TimelinePage() {
       severity: form.severity,
       flagged: form.flagged,
     } as never);
+    setSaving(false);
+    if (error) { alert(`Could not save event: ${error.message}`); return; }
     setForm({ title: "", description: "", event_date: "", category: "Other", severity: "medium", flagged: false });
     setModalOpen(false);
-    setSaving(false);
     fetchEvents();
   };
 
