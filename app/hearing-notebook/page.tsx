@@ -252,10 +252,67 @@ function Step5({ hearingType, selectedEvents, selectedEvidence, onBack }: {
     setTimeout(() => setExported(null), 2500);
   };
 
+  const exportExhibitIndex = () => {
+    const rows = [
+      ["Exhibit #", "Title", "Category", "Document Date", "Notes"],
+      ...selectedEvidence.map((ev, i) => [
+        `Exhibit ${i + 1}`,
+        ev.title,
+        ev.category,
+        ev.date_of_document ? new Date(ev.date_of_document).toLocaleDateString() : "",
+        ev.notes ?? "",
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "exhibit-index.csv"; a.click();
+    URL.revokeObjectURL(url);
+    setExported("Exhibit");
+    setTimeout(() => setExported(null), 2500);
+  };
+
+  const exportPDF = () => {
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const sortedEvents = [...selectedEvents].sort((a, b) => a.event_date.localeCompare(b.event_date));
+    const html = `<!doctype html><html><head><title>Hearing Packet</title>
+<style>
+  body { font-family: Georgia, serif; color: #111; max-width: 720px; margin: 40px auto; line-height: 1.5; }
+  h1 { font-size: 22px; border-bottom: 2px solid #111; padding-bottom: 8px; }
+  h2 { font-size: 16px; margin-top: 32px; text-transform: uppercase; letter-spacing: 1px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+  th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  .meta { color: #555; font-size: 13px; margin-top: 4px; }
+  .disclaimer { margin-top: 40px; font-size: 11px; color: #666; border-top: 1px solid #ccc; padding-top: 12px; }
+  @media print { body { margin: 0.5in; } }
+</style></head><body>
+<h1>Hearing Packet — ${esc(hearingType)}</h1>
+<p class="meta">Prepared ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} · ${sortedEvents.length} timeline events · ${selectedEvidence.length} evidence items</p>
+<h2>Chronological Timeline</h2>
+<table><tr><th style="width:110px">Date</th><th>Event</th><th style="width:120px">Category</th><th style="width:60px">Flagged</th></tr>
+${sortedEvents.map((e) => `<tr><td>${new Date(e.event_date).toLocaleDateString()}</td><td>${esc(e.title)}</td><td>${esc(e.category)}</td><td>${e.flagged ? "Yes" : ""}</td></tr>`).join("")}
+</table>
+<h2>Exhibit Index</h2>
+<table><tr><th style="width:90px">Exhibit</th><th>Title</th><th style="width:120px">Category</th><th style="width:110px">Doc. Date</th></tr>
+${selectedEvidence.map((ev, i) => `<tr><td>Exhibit ${i + 1}</td><td>${esc(ev.title)}${ev.notes ? `<br><span style="color:#666;font-size:12px">${esc(ev.notes)}</span>` : ""}</td><td>${esc(ev.category)}</td><td>${ev.date_of_document ? new Date(ev.date_of_document).toLocaleDateString() : ""}</td></tr>`).join("")}
+</table>
+<p class="disclaimer">Prepared with Evidence OS. This document is an organizational aid only and does not constitute legal advice.</p>
+<script>window.onload = () => window.print();</script>
+</body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Pop-up blocked — please allow pop-ups for this site and try again."); return; }
+    win.document.write(html);
+    win.document.close();
+    setExported("PDF");
+    setTimeout(() => setExported(null), 2500);
+  };
+
   const handleExport = (type: string) => {
     if (type === "CSV") { exportCSV(); return; }
-    setExported(type);
-    setTimeout(() => setExported(null), 2500);
+    if (type === "PDF") { exportPDF(); return; }
+    if (type === "Exhibit") { exportExhibitIndex(); return; }
   };
 
   return (
@@ -288,8 +345,8 @@ function Step5({ hearingType, selectedEvents, selectedEvidence, onBack }: {
       <div className="space-y-3">
         {[
           { type: "CSV", icon: <FileText size={18} className="text-green-600" />, label: "Export Timeline CSV", desc: "Chronological event log as a spreadsheet. Downloads immediately." },
-          { type: "PDF", icon: <Download size={18} className="text-purple-600" />, label: "Generate PDF Packet", desc: "Full packet PDF — coming soon." },
-          { type: "Exhibit", icon: <BookMarked size={18} className="text-blue-600" />, label: "Export Exhibit Index", desc: "Numbered exhibit list — coming soon." },
+          { type: "PDF", icon: <Download size={18} className="text-purple-600" />, label: "Print / Save PDF Packet", desc: "Opens a print-ready packet — choose 'Save as PDF' in the print dialog." },
+          { type: "Exhibit", icon: <BookMarked size={18} className="text-blue-600" />, label: "Export Exhibit Index", desc: "Numbered exhibit list as a spreadsheet. Downloads immediately." },
         ].map(({ type, icon, label, desc }) => (
           <button key={type} onClick={() => handleExport(type)}
             className={cn("w-full flex items-center gap-4 px-5 py-4 rounded-xl border-2 text-left transition-all",

@@ -40,7 +40,7 @@ export default function OnboardingPage() {
       id: user.id,
       full_name: user.user_metadata?.full_name ?? "",
       email: user.email ?? "",
-    });
+    } as never);
 
     const { error: caseError } = await supabase.from("cases").insert({
       owner_id: user.id,
@@ -48,7 +48,7 @@ export default function OnboardingPage() {
       case_type: caseType,
       jurisdiction: jurisdiction.trim() || null,
       status: "active",
-    });
+    } as never);
 
     if (caseError) {
       setError(caseError.message);

@@ -67,16 +67,22 @@ export default function TasksPage() {
     e.preventDefault();
     if (!activeCase || !form.title.trim()) return;
     setSaving(true);
-    await supabase.from("tasks").insert({
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("tasks").insert({
       case_id: activeCase.id,
+      owner_id: user?.id,
       title: form.title.trim(),
       due_date: form.due_date || null,
       priority: form.priority,
       status: form.status,
     } as never);
+    setSaving(false);
+    if (error) {
+      alert(`Could not save task: ${error.message}`);
+      return;
+    }
     setForm({ title: "", due_date: "", priority: "medium", status: "pending" });
     setModalOpen(false);
-    setSaving(false);
     fetchTasks();
   };
 
