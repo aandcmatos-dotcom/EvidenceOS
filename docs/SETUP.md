@@ -148,6 +148,18 @@ uploading a reference **file** (PDF/DOCX) — use "Manual citation" or "Paste te
 the AI Assistant panel's chat, which runs the deterministic Phase 3 service rather than persisting
 conversations to `ai_conversations`/`ai_messages` yet.
 
+## Security settings worth turning on (Supabase Dashboard)
+
+These are dashboard toggles, not code — set them once per project:
+
+1. **Auth → Sessions**: set a session timeout (e.g., "time-box user sessions" to 24h and
+   inactivity timeout to 1–2h) so an unattended browser doesn't stay signed in to case data.
+2. **Auth → Multi-Factor Authentication**: enable TOTP MFA so users can add an authenticator app.
+3. **Auth → Email**: confirm "Confirm email" is on (it is by default) so accounts are verified.
+
+Everything else — RLS on all 60+ tables, audit/export/AI-request logging, signed file URLs,
+user-approved redaction — is enforced in the migrations and app code you already installed.
+
 ## Safety model (why this is not "legal advice" software)
 
 - Every factual or rule statement must trace to a source you provided; anything else is flagged

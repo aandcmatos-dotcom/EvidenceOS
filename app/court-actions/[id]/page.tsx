@@ -28,6 +28,7 @@ import { suggestCitations } from "@/lib/services/legalReferenceSuggestionService
 import { buildChecklist } from "@/lib/services/proceduralChecklistService";
 import { checkPackageConsistency, type PackageDocument } from "@/lib/services/documentConsistencyService";
 import { exportDocx, exportPDF, exportText, copyToClipboard, type ExportDoc } from "@/lib/documents/export";
+import { detectSensitive, applyRedactions, SENSITIVE_LABEL } from "@/lib/security/redaction";
 import { questionBankFor, TEMPORARY_RELIEF_PACKAGE } from "@/lib/mock/court-actions";
 import type { SelectableSource } from "@/lib/mock/sources";
 import type { LegalReference } from "@/lib/references/types";
@@ -467,7 +468,15 @@ export default function CourtActionPage({ params }: { params: Promise<{ id: stri
           )}
           {step === 10 && (
             <Step10 attested={attested} setAttested={setAttested} checklist={checklist} setChecklist={setChecklist}
-              docs={generatedDocs} actionTitle={action.title} />
+              docs={generatedDocs} actionTitle={action.title}
+              onExported={async (format) => {
+                if (user) {
+                  try {
+                    await logAudit({ userId: user.id, caseId: activeCase.id, action: "court_action.export", entityType: "court_actions", entityId: action.id, metadata: { format } });
+                    await updateAction(action.id, { status: "exported" });
+                  } catch { /* export already completed locally */ }
+                }
+              }} />
           )}
         </div>
 
@@ -612,18 +621,30 @@ function Step8({ docs }: { docs: { name: string; statements: DraftStatement[] }[
   );
 }
 
-function Step10({ attested, setAttested, checklist, setChecklist, docs, actionTitle }: {
+function Step10({ attested, setAttested, checklist, setChecklist, docs, actionTitle, onExported }: {
   attested: boolean; setAttested: (v: boolean) => void;
   checklist: ChecklistItem[]; setChecklist: (c: ChecklistItem[]) => void;
   docs: { name: string; statements: DraftStatement[] }[]; actionTitle: string;
+  onExported: (format: string) => Promise<void>;
 }) {
   const [done, setDone] = useState<string | null>(null);
+
+  const allText = docs.flatMap((d) => d.statements.map((s) => s.text)).join("\n");
+  const sensitive = detectSensitive(allText);
+  const [redactApproved, setRedactApproved] = useState<Set<number>>(new Set());
 
   const combinedDoc = (): ExportDoc => ({
     title: actionTitle,
     statements: docs.flatMap((d) => [
       { id: `h-${d.name}`, text: `——— ${d.name.toUpperCase()} ———`, status: "user_entered" as const, sources: [] },
-      ...d.statements,
+      ...d.statements.map((s) => {
+        if (redactApproved.size === 0) return s;
+        const local = detectSensitive(s.text).filter((m) => {
+          const globalIdx = sensitive.findIndex((g) => g.text === m.text);
+          return redactApproved.has(globalIdx);
+        });
+        return local.length ? { ...s, text: applyRedactions(s.text, local) } : s;
+      }),
     ]),
     signatureBlock: "Respectfully submitted,\n\n_______________________________\n(Signature)",
   });
@@ -634,6 +655,7 @@ function Step10({ attested, setAttested, checklist, setChecklist, docs, actionTi
     else if (id === "PDF") exportPDF(doc);
     else if (id === "TXT") exportText(doc);
     else if (id === "COPY") { const ok = await copyToClipboard(doc); if (!ok) { alert("Could not copy."); return; } }
+    await onExported(id);
     setDone(id); setTimeout(() => setDone(null), 2000);
   };
 
@@ -647,6 +669,28 @@ function Step10({ attested, setAttested, checklist, setChecklist, docs, actionTi
   return (
     <div>
       <StepHeading title="Export" sub="Export happens on your device. Filing and service always remain your decision — there is no one-click filing. Individual documents can also be exported from the Documents page." />
+
+      {sensitive.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+          <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5 mb-2">
+            <AlertTriangle size={14} /> {sensitive.length} possible sensitive item{sensitive.length !== 1 ? "s" : ""} detected in this package
+          </p>
+          <p className="text-xs text-red-700 mb-3">Nothing is redacted unless you check it. Review each item and choose what to redact before export.</p>
+          <div className="space-y-1.5">
+            {sensitive.map((m, i) => (
+              <label key={i} className="flex items-center gap-2 text-xs bg-white border border-red-100 rounded-lg px-2.5 py-1.5 cursor-pointer">
+                <input type="checkbox" checked={redactApproved.has(i)}
+                  onChange={(e) => setRedactApproved((prev) => { const n = new Set(prev); if (e.target.checked) n.add(i); else n.delete(i); return n; })}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                <span className="font-medium text-gray-700">{SENSITIVE_LABEL[m.kind]}:</span>
+                <span className="font-mono text-gray-500">{m.text}</span>
+                <span className="text-gray-400 ml-auto">→ {m.suggestedReplacement}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <label className="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50 cursor-pointer mb-4">
         <input type="checkbox" checked={attested} onChange={(e) => setAttested(e.target.checked)}
           className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 mt-0.5" />
