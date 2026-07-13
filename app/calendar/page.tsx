@@ -5,7 +5,10 @@ import AppLayout from "@/components/AppLayout";
 import Modal from "@/components/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import DeadlineVerifyModal from "@/components/deadlines/DeadlineVerifyModal";
+import { getDeadlines } from "@/lib/db/deadlines";
+import { calendarDeadlines, verificationQueue, type DeadlineRow } from "@/lib/services/deadlines";
+import { Plus, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CalEvent {
@@ -40,6 +43,8 @@ export default function CalendarPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ hearing_type: "", hearing_date: "", location: "", notes: "" });
+  const [deadlines, setDeadlines] = useState<DeadlineRow[]>([]);
+  const [verifying, setVerifying] = useState<DeadlineRow | null>(null);
 
   const supabase = createClient();
 
@@ -76,6 +81,16 @@ export default function CalendarPage() {
       const day = parseInt(t.due_date.slice(8, 10), 10);
       evts.push({ key: `k-${t.id}`, day, title: `Due: ${t.title}`, color: "bg-gray-600", isHearing: false });
     });
+
+    // Verified deadlines only — unverified ones stay in the queue banner.
+    const allDeadlines = ((await getDeadlines(caseId).catch(() => [])) ?? []) as unknown as DeadlineRow[];
+    setDeadlines(allDeadlines);
+    calendarDeadlines(allDeadlines).forEach((d) => {
+      if (!d.due_date || d.due_date < monthStart || d.due_date > monthEnd) return;
+      const day = parseInt(d.due_date.slice(8, 10), 10);
+      evts.push({ key: `dl-${d.id}`, day, title: `DEADLINE: ${d.title}`, color: "bg-red-700", isHearing: false });
+    });
+
     setEvents(evts);
     setLoading(false);
   }, [activeCase, monthStart, monthEnd]);
@@ -124,8 +139,30 @@ export default function CalendarPage() {
       </div>
 
       <p className="text-xs text-gray-400 mb-4">
-        Showing hearings, timeline events, and task due dates for this month. Add timeline events from the Timeline page and tasks from the Tasks page.
+        Showing hearings, timeline events, task due dates, and verified deadlines for this month. Deadlines appear here only after you verify them.
       </p>
+
+      {verificationQueue(deadlines).length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-orange-800 mb-2">
+            <AlertTriangle size={15} /> Deadlines requiring verification ({verificationQueue(deadlines).length})
+          </p>
+          <div className="space-y-1.5">
+            {verificationQueue(deadlines).map((d) => (
+              <div key={d.id} className="flex items-center gap-3 bg-white border border-orange-100 rounded-xl px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800">{d.title}</p>
+                  <p className="text-[11px] text-gray-400">{d.trigger_event}{d.trigger_date ? ` · ${d.trigger_date}` : ""} · <span className="text-orange-600 font-medium">requires verification</span></p>
+                </div>
+                <button onClick={() => setVerifying(d)}
+                  className="text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg px-2.5 py-1.5 transition-colors flex-shrink-0">
+                  Verify
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="grid grid-cols-7 border-b border-gray-100">
@@ -163,6 +200,8 @@ export default function CalendarPage() {
           })}
         </div>
       </div>
+
+      <DeadlineVerifyModal deadline={verifying} onClose={() => setVerifying(null)} onVerified={fetchEvents} />
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Hearing">
         <form onSubmit={addHearing} className="space-y-4">

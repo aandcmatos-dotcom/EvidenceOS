@@ -43,11 +43,12 @@ interface Metrics {
   events: number;
   people: number;
   tasks: number;
+  unverifiedDeadlines: number;
 }
 
 export default function DashboardPage() {
   const { activeCase } = useAuth();
-  const [metrics, setMetrics] = useState<Metrics>({ evidence: 0, events: 0, people: 0, tasks: 0 });
+  const [metrics, setMetrics] = useState<Metrics>({ evidence: 0, events: 0, people: 0, tasks: 0, unverifiedDeadlines: 0 });
   const [recentEvidence, setRecentEvidence] = useState<RecentEvidence[]>([]);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
@@ -78,11 +79,16 @@ export default function DashboardPage() {
       supabase.from("tasks").select("id, title, due_date, priority, status").eq("case_id", caseId).neq("status", "done").order("due_date", { ascending: true }).limit(5),
     ]);
 
+    const { count: dlCount } = await supabase.from("deadlines")
+      .select("*", { count: "exact", head: true })
+      .eq("case_id", caseId).eq("status", "requires_verification");
+
     setMetrics({
       evidence: evCount ?? 0,
       events: eventCount ?? 0,
       people: peopleCount ?? 0,
       tasks: taskCount ?? 0,
+      unverifiedDeadlines: dlCount ?? 0,
     });
     setRecentEvidence((recentEv ?? []) as RecentEvidence[]);
     setRecentEvents((recentEv2 ?? []) as RecentEvent[]);
@@ -115,6 +121,16 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
+          {!loading && metrics.unverifiedDeadlines > 0 && (
+            <Link href="/calendar" className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-5 hover:bg-orange-100 transition-colors">
+              <AlertTriangle size={16} className="text-orange-600 flex-shrink-0" />
+              <p className="text-sm text-orange-800 flex-1">
+                <strong>{metrics.unverifiedDeadlines} deadline{metrics.unverifiedDeadlines !== 1 ? "s" : ""} requiring verification.</strong> Verify them on the Calendar so they appear with a confirmed date.
+              </p>
+              <ArrowRight size={15} className="text-orange-400" />
+            </Link>
+          )}
+
           {/* Metric Cards */}
           <div className="grid grid-cols-4 gap-4 mb-6">
             <MetricCard icon={<FolderOpen size={20} className="text-purple-600" />} bg="bg-purple-50"

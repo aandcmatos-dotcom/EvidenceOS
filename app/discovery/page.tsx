@@ -7,6 +7,7 @@ import Disclaimer from "@/components/shared/Disclaimer";
 import AssistantLauncher from "@/components/assistant/AssistantLauncher";
 import DiscoveryRequestBuilder from "@/components/discovery/DiscoveryRequestBuilder";
 import SubpoenaBuilder from "@/components/discovery/SubpoenaBuilder";
+import { MarkServedModal, LogResponseModal, DeficiencyWorksheet, type TrackableInstrument } from "@/components/discovery/InstrumentTracking";
 import { useAuth } from "@/contexts/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { getActions, getCaptions, recordConfirmations } from "@/lib/db/court-actions";
@@ -52,6 +53,9 @@ export default function DiscoveryPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"list" | "request" | "subpoena">("list");
   const [finalizing, setFinalizing] = useState<InstrumentRow | null>(null);
+  const [serving, setServing] = useState<InstrumentRow | null>(null);
+  const [logging, setLogging] = useState<InstrumentRow | null>(null);
+  const [worksheet, setWorksheet] = useState<InstrumentRow | null>(null);
   const [confirms, setConfirms] = useState<boolean[]>(FINALIZE_CONFIRMATIONS.map(() => false));
 
   const supabase = createClient();
@@ -154,6 +158,9 @@ export default function DiscoveryPage() {
       ) : mode === "subpoena" ? (
         <SubpoenaBuilder people={people} caseId={activeCase.id} userId={user?.id ?? null}
           onDone={() => { setMode("list"); fetchAll(); }} onCancel={() => setMode("list")} />
+      ) : worksheet ? (
+        <DeficiencyWorksheet row={worksheet as TrackableInstrument} caseId={activeCase.id} userId={user?.id ?? null}
+          onBack={() => setWorksheet(null)} />
       ) : (
         <>
           <div className="flex items-center justify-between mb-5">
@@ -213,6 +220,24 @@ export default function DiscoveryPage() {
                               <Check size={11} /> Finalize
                             </button>
                           )}
+                          {!r.servedDate && r.status !== "draft" && (
+                            <button onClick={() => setServing(r)}
+                              className="text-[11px] font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2 py-1 transition-colors">
+                              Mark served
+                            </button>
+                          )}
+                          {r.servedDate && (
+                            <>
+                              <button onClick={() => setLogging(r)}
+                                className="text-[11px] font-medium text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:border-purple-300 hover:text-purple-700 transition-colors">
+                                Log response
+                              </button>
+                              <button onClick={() => setWorksheet(r)}
+                                className="text-[11px] font-medium text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:border-purple-300 hover:text-purple-700 transition-colors">
+                                Worksheet
+                              </button>
+                            </>
+                          )}
                           <button onClick={() => printRow(r)} className="flex items-center gap-1 text-[11px] text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:border-purple-300 hover:text-purple-700 transition-colors">
                             <Printer size={11} /> Print
                           </button>
@@ -247,6 +272,15 @@ export default function DiscoveryPage() {
           Finalize
         </button>
       </Modal>
+
+      {activeCase && (
+        <>
+          <MarkServedModal row={serving as TrackableInstrument | null} caseId={activeCase.id} userId={user?.id ?? null}
+            onClose={() => setServing(null)} onDone={fetchAll} />
+          <LogResponseModal row={logging as TrackableInstrument | null} caseId={activeCase.id} userId={user?.id ?? null}
+            onClose={() => setLogging(null)} onDone={fetchAll} />
+        </>
+      )}
 
       <AssistantLauncher contextLabel="Discovery" />
     </AppLayout>

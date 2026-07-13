@@ -1,6 +1,12 @@
 # Evidence OS — Project Map
 
-Branch: `claude/court-action-workspace` · Generated 2026-07-13
+Branch: `claude/court-action-workspace` · Updated 2026-07-13 (discovery generation + tracking pass)
+
+> Migrations now run through **008** (`007_discovery_subpoenas.sql`, `008_deadlines_tracking.sql`).
+> New tables since first version: `subpoena_items`, `deadlines`, `instrument_responses`,
+> `deficiency_entries`, `inbound_filings` (72 total). New routes: `/inbound`, `/api/intake-suggest`.
+> New test suites: `test:discovery` (22), `test:deadlines` (14) — full run `npm test` = 97 assertions
+> + 30-file neutral-language scan.
 
 ## Tech stack
 
@@ -121,7 +127,10 @@ Storage: one private bucket `evidence-files` (signed URLs).
 | References | **working** | CRUD, verify, assign-to-case, version/supersede plumbing; file-upload ingestion **stub** (use paste/manual) |
 | Document Review | **working** | Real review service against saved docs or pasted text; findings + decisions persist; DOCX/PDF upload parsing **stub** |
 | Court Actions (10-step wizard) | **working** | Persistence per step; fact/citation approval gates; package generation → generated_documents; consistency report; checklist; redaction-screened export + audit log |
-| Discovery | **working** | Numbered request generation, save, print; subpoena builder **stub** (table exists, no UI) |
+| Discovery | **working** | All four instruments (RFP / rogs / RFA w/ phrasing templates / subpoena duces tecum) generate caption-correct, redaction-screened printable documents; unified dashboard with finalize (confirmations), mark-served (creates requires-verification deadline), response logging, and deficiency worksheets with neutral compel pathway |
+| Subpoena builder | **working** | Records-only + records+testimony; custodian recipients; per-item date ranges; unselected gap suggestions; procedural panel resolved at runtime from assigned references with blocking notice when uncovered; cost estimates; linked generated_documents row |
+| Deadline engine | **working** | Always created `requires_verification`; verification demands a user-selected counting-method reference + user-confirmed date (candidate parsed from reference text at runtime, never hardcoded); verified-only on calendar; dashboard queue; audit-logged verification |
+| Inbound Filings (`/inbound`) | **working** | Received filing → evidence + optional deadline + noticed hearing + prefilled response wizard; optional LLM classification via `/api/intake-suggest` (deterministic form without key) |
 | Question Builder | **working** | Safety-screened, foundation-flagged sets; save + print |
 | Hearing Preparation | **working** | Creates hearing-prep action + hearing_packages row; deep hearing-specific component presets **partial** (uses the standard package preset) |
 | AI Assistant panel | **partial** | UI + modes + strategy refusal work; responses are deterministic previews; conversations not yet persisted to ai_* tables; live LLM adapter present but not wired to the panel |

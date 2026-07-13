@@ -11,7 +11,8 @@
     "test:language": "node --experimental-strip-types test/neutral-language.test.ts",
     "test:court-actions": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/court-actions.test.ts",
     "test:discovery": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/discovery.test.ts",
-    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:language"
+    "test:deadlines": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/deadlines.test.ts",
+    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:language"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
