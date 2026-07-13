@@ -223,6 +223,7 @@ function IngestModal({ open, onClose, userId, caseId, onCreated }: {
 }) {
   const [method, setMethod] = useState<"upload" | "url" | "paste" | "manual">("manual");
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [form, setForm] = useState({
     title: "", citation: "", state: "", county: "", category: REFERENCE_CATEGORIES[0] as string,
     sourceUrl: "", pastedText: "",
@@ -286,8 +287,21 @@ function IngestModal({ open, onClose, userId, caseId, onCreated }: {
         {method === "upload" && (
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
             <Upload size={22} className="text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">Drop a PDF or DOCX, or click to browse</p>
-            <p className="text-xs text-gray-400 mt-1">File upload + text extraction is not wired yet — use &quot;Manual citation&quot; or &quot;Paste text&quot; for now.</p>
+            <p className="text-sm text-gray-500 mb-2">Choose a PDF, DOCX, or text file — its text is extracted into the reference.</p>
+            <input type="file" accept=".pdf,.docx,.txt,.rtf,.csv,.eml"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]; if (!f) return;
+                setExtracting(true);
+                try {
+                  const { extractFromFile } = await import("@/lib/services/extraction");
+                  const res = await extractFromFile(f, f.name, f.type);
+                  if (res.needsOcr) alert("This file looks like a scan with no text layer. Save it, then paste the text manually.");
+                  setForm((prev) => ({ ...prev, title: prev.title || f.name.replace(/\.[^.]+$/, ""), pastedText: res.text ?? prev.pastedText }));
+                } finally { setExtracting(false); }
+              }}
+              className="w-full text-sm text-gray-500" />
+            {extracting && <p className="text-xs text-purple-600 mt-2">Extracting text…</p>}
+            <p className="text-xs text-gray-400 mt-2">Extracted text lands in the reference&apos;s full text below — review it before saving. Scans without a text layer need manual paste.</p>
           </div>
         )}
         {method === "url" && (

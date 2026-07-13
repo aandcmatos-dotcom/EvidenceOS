@@ -12,15 +12,19 @@
     "test:court-actions": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/court-actions.test.ts",
     "test:discovery": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/discovery.test.ts",
     "test:deadlines": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/deadlines.test.ts",
-    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:language"
+    "test:import": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/import.test.ts",
+    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:import && npm run test:language"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.2",
     "lucide-react": "^1.22.0",
+    "mammoth": "^1.9.0",
     "next": "16.2.9",
+    "pdfjs-dist": "^4.10.38",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.9.2",

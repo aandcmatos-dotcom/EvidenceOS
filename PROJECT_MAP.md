@@ -2,11 +2,14 @@
 
 Branch: `claude/court-action-workspace` · Updated 2026-07-13 (discovery generation + tracking pass)
 
-> Migrations now run through **008** (`007_discovery_subpoenas.sql`, `008_deadlines_tracking.sql`).
-> New tables since first version: `subpoena_items`, `deadlines`, `instrument_responses`,
-> `deficiency_entries`, `inbound_filings` (72 total). New routes: `/inbound`, `/api/intake-suggest`.
-> New test suites: `test:discovery` (22), `test:deadlines` (14) — full run `npm test` = 97 assertions
-> + 30-file neutral-language scan.
+> Migrations now run through **009** (…`008_deadlines_tracking.sql`, `009_imports.sql`).
+> New tables: `subpoena_items`, `deadlines`, `instrument_responses`, `deficiency_entries`,
+> `inbound_filings`, `import_batches`, `import_files` (74 total); `evidence` gained
+> `extracted_text` / `text_source` / `page_count`. New routes: `/inbound`, `/import`,
+> `/import/[id]`, `/api/intake-suggest`. New deps: pdfjs-dist, mammoth, fflate.
+> New test suites: `test:discovery` (22), `test:deadlines` (14), `test:import` (24) — full run
+> `npm test` = 121 assertions + 36-file neutral-language scan. Bulk import + text extraction:
+> see docs/IMPORT_PIPELINE.md.
 
 ## Tech stack
 
@@ -124,8 +127,9 @@ Storage: one private bucket `evidence-files` (signed URLs).
 | Dashboard | **working** | Live Supabase counts + recents |
 | Timeline / Evidence / Exhibits / People / Communications / Calendar / Tasks / Court Orders | **working** | Full CRUD; evidence uploads to private bucket; exhibits print a coversheet packet |
 | Documents (library + 7-step wizard + detail) | **working** | Real sources, guarded generation, versioned persistence, DOCX/PDF/text export w/ redaction review |
-| References | **working** | CRUD, verify, assign-to-case, version/supersede plumbing; file-upload ingestion **stub** (use paste/manual) |
-| Document Review | **working** | Real review service against saved docs or pasted text; findings + decisions persist; DOCX/PDF upload parsing **stub** |
+| References | **working** | CRUD, verify, assign-to-case, version/supersede plumbing; file-upload ingestion now extracts text (PDF/DOCX/TXT) via the shared extraction service |
+| Bulk Import (`/import`) | **working** | Drag-drop folder + files + client-side zip expansion; sha256 dedup (resumable), 5-way concurrent upload to the evidence bucket under a batch prefix, live status table w/ filters; text extraction (pdfjs/mammoth) with needs_ocr detection; single/bulk promotion to evidence sharing the same storage object; backfill over existing evidence; audit-logged |
+| Document Review | **working** | Real review service against saved docs, pasted text, or an uploaded DOCX/PDF (text extracted via the shared service); findings + decisions persist |
 | Court Actions (10-step wizard) | **working** | Persistence per step; fact/citation approval gates; package generation → generated_documents; consistency report; checklist; redaction-screened export + audit log |
 | Discovery | **working** | All four instruments (RFP / rogs / RFA w/ phrasing templates / subpoena duces tecum) generate caption-correct, redaction-screened printable documents; unified dashboard with finalize (confirmations), mark-served (creates requires-verification deadline), response logging, and deficiency worksheets with neutral compel pathway |
 | Subpoena builder | **working** | Records-only + records+testimony; custodian recipients; per-item date ranges; unselected gap suggestions; procedural panel resolved at runtime from assigned references with blocking notice when uncovered; cost estimates; linked generated_documents row |

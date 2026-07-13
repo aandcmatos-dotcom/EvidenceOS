@@ -281,15 +281,18 @@ function StartScreen({ documents, loading, running, onRun }: {
   const [source, setSource] = useState<"existing" | "upload" | "paste">("existing");
   const [selectedDoc, setSelectedDoc] = useState("");
   const [pasted, setPasted] = useState("");
+  const [uploadText, setUploadText] = useState("");
+  const [extracting, setExtracting] = useState(false);
 
   useEffect(() => { if (documents.length > 0 && !selectedDoc) setSelectedDoc(documents[0].id); }, [documents, selectedDoc]);
 
   const handleRun = () => {
     if (source === "paste") { if (pasted.trim()) onRun("", pasted); return; }
+    if (source === "upload") { if (uploadText.trim()) onRun("", uploadText); return; }
     if (source === "existing" && selectedDoc) onRun(selectedDoc);
   };
 
-  const canRun = source === "paste" ? pasted.trim().length > 0 : !!selectedDoc;
+  const canRun = source === "paste" ? pasted.trim().length > 0 : source === "upload" ? uploadText.trim().length > 0 : !!selectedDoc;
 
   return (
     <div className="max-w-2xl">
@@ -330,10 +333,27 @@ function StartScreen({ documents, loading, running, onRun }: {
           )
         )}
         {source === "upload" && (
-          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center mb-5">
-            <Upload size={22} className="text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">Drop a file or click to browse</p>
-            <p className="text-xs text-gray-400 mt-1">File upload isn&apos;t wired yet — use &quot;Paste text&quot; for now.</p>
+          <div className="mb-5">
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+              <Upload size={22} className="text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500 mb-2">Choose a DOCX, PDF, or text file — its text is extracted for review.</p>
+              <input type="file" accept=".pdf,.docx,.txt,.rtf,.csv,.eml"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  setExtracting(true);
+                  try {
+                    const { extractFromFile } = await import("@/lib/services/extraction");
+                    const res = await extractFromFile(f, f.name, f.type);
+                    if (res.needsOcr) alert("This file looks like a scan with no text layer. Paste the text manually to review it.");
+                    setUploadText(res.text ?? "");
+                  } finally { setExtracting(false); }
+                }}
+                className="w-full text-sm text-gray-500" />
+              {extracting && <p className="text-xs text-purple-600 mt-2">Extracting text…</p>}
+            </div>
+            {uploadText && (
+              <p className="text-xs text-gray-500 mt-2">{uploadText.length.toLocaleString()} characters extracted — ready to review.</p>
+            )}
           </div>
         )}
         {source === "paste" && (
