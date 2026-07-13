@@ -13,6 +13,7 @@ const SCAN_DIRS = [
   "lib/court-actions",
   "lib/services/questionGenerationService.ts", "lib/services/discoveryService.ts",
   "lib/services/proceduralChecklistService.ts", "lib/services/legalReferenceSuggestionService.ts",
+  "components/discovery", "lib/services/subpoenaService.ts", "lib/services/instrumentPrintService.ts",
 ];
 
 // Banned as user-facing labels for document options / outcomes (Section 2 + 7).

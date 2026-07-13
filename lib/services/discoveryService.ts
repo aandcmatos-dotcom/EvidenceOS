@@ -12,6 +12,15 @@ export const DISCOVERY_KIND_LABEL: Record<DiscoveryKind, string> = {
   admissions: "Request for Admissions",
 };
 
+// Structural phrasing templates for admissions items. The user authors the
+// substance; these provide the conventional opening only, and every generated
+// item stays fully editable before save.
+export const ADMISSION_TEMPLATES = [
+  { id: "truth", label: "Admit the truth of the matter", apply: (s: string) => `Admit the truth of the following matter: ${s.replace(/\.$/, "")}.` },
+  { id: "fact", label: "Admit that…", apply: (s: string) => `Admit that ${s.charAt(0).toLowerCase()}${s.slice(1).replace(/\.$/, "")}.` },
+  { id: "genuineness", label: "Admit the genuineness of a document", apply: (s: string) => `Admit the genuineness of the following document: ${s.replace(/\.$/, "")}.` },
+] as const;
+
 export interface DiscoveryGenRequest {
   kind: DiscoveryKind;
   recipient: string;
