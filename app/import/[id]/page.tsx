@@ -7,9 +7,10 @@ import Disclaimer from "@/components/shared/Disclaimer";
 import { useAuth } from "@/contexts/AuthContext";
 import { getBatch, getBatchFiles, getExistingHashes, updateBatchCounts, promoteToEvidence, type ImportFileRow } from "@/lib/db/imports";
 import { buildIngestItems, runUpload, runExtraction, type IngestItem } from "@/lib/import/pipeline";
+import { runClassification, type ClassifyProgress } from "@/lib/import/classifyRun";
 import {
   ArrowLeft, UploadCloud, FolderInput, AlertTriangle, CheckCircle, Clock,
-  FileText, Copy, ScanLine, ArrowUpRight,
+  FileText, Copy, ScanLine, ArrowUpRight, Sparkles, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,7 @@ export default function ImportBatchPage({ params }: { params: Promise<{ id: stri
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [promoting, setPromoting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [classifying, setClassifying] = useState<ClassifyProgress | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,6 +114,17 @@ export default function ImportBatchPage({ params }: { params: Promise<{ id: stri
     ingest(picked);
   };
 
+  const runClassify = async () => {
+    if (!user || !activeCase) return;
+    setClassifying({ done: 0, total: rows.length });
+    try {
+      await runClassification(id, activeCase.id, user.id, setClassifying);
+    } finally {
+      setClassifying(null);
+      window.location.href = `/import/${id}/review`;
+    }
+  };
+
   const promote = async (ids: string[]) => {
     if (!user || !activeCase || ids.length === 0) return;
     setPromoting(true);
@@ -150,12 +163,24 @@ export default function ImportBatchPage({ params }: { params: Promise<{ id: stri
             {counts.total} files · {counts.extracted} extracted · {counts.needs_ocr} need OCR · {counts.duplicate} duplicate · {counts.failed} failed · {counts.promoted} promoted
           </p>
         </div>
-        {promotable.length > 0 && !running && (
-          <button onClick={() => promote(promotable.map((r) => r.id))} disabled={promoting}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors">
-            <ArrowUpRight size={15} /> Promote all ({promotable.length}) to Evidence
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {rows.length > 0 && !running && (
+            <button onClick={runClassify} disabled={!!classifying}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors">
+              <Sparkles size={15} /> {classifying ? `Classifying ${classifying.done}/${classifying.total}…` : "Classify & route"}
+            </button>
+          )}
+          <Link href={`/import/${id}/review`}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:border-purple-300 hover:text-purple-700 transition-colors">
+            <ClipboardList size={15} /> Review
+          </Link>
+          {promotable.length > 0 && !running && (
+            <button onClick={() => promote(promotable.map((r) => r.id))} disabled={promoting}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:border-purple-300 hover:text-purple-700 transition-colors">
+              <ArrowUpRight size={15} /> Promote all ({promotable.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {counts.needs_ocr > 0 && (

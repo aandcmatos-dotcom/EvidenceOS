@@ -16,6 +16,7 @@ const SCAN_DIRS = [
   "components/discovery", "lib/services/subpoenaService.ts", "lib/services/instrumentPrintService.ts",
   "app/inbound", "components/deadlines", "lib/services/deadlines.ts", "lib/db/deadlines.ts",
   "app/import", "lib/import", "lib/services/extraction.ts", "lib/db/imports.ts",
+  "lib/services/importClassification.ts", "lib/services/importRouting.ts", "lib/db/classification.ts",
 ];
 
 // Banned as user-facing labels for document options / outcomes (Section 2 + 7).

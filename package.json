@@ -13,7 +13,8 @@
     "test:discovery": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/discovery.test.ts",
     "test:deadlines": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/deadlines.test.ts",
     "test:import": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/import.test.ts",
-    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:import && npm run test:language"
+    "test:import-classification": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/import-classification.test.ts",
+    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:import && npm run test:import-classification && npm run test:language"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

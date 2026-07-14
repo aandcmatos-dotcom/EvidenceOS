@@ -144,3 +144,35 @@ export const PRIORITY_ORDER = [
   "State Statute",
   "Other Public Authority",
 ] as const;
+
+// ── Import classification (Import Prompt 2) ─────────────────────────────────
+export type PrimaryType =
+  | "court_order" | "pleading_filing" | "evidence" | "communication" | "discovery"
+  | "hearing_material" | "case_note" | "legal_reference" | "administrative_record" | "other";
+
+export type ClassificationFlag =
+  | "possible_duplicate_content" | "unreadable_portions" | "contains_minor_identifiers"
+  | "contains_ssn_or_account" | "contains_medical" | "wrong_case_number" | "undated";
+
+export interface DetectedPerson {
+  name: string;
+  suggestedRole: string;
+  matchedPersonId: string | null;   // matched to an existing people row, or null (never auto-created)
+}
+
+// Strict classification result. Persisted to import_file_classifications; user
+// edits are protected from any reclassification.
+export interface ClassificationResult {
+  primaryType: PrimaryType;
+  subtype: string;
+  subjectCategories: string[];
+  documentDate: string | null;      // ISO date, best single date
+  dateConfidence: Confidence;
+  detectedPeople: DetectedPerson[];
+  detectedCaseNumber: string | null;
+  caseNumberMatches: boolean;
+  summary: string;                  // neutral, descriptive — must pass checkProhibited
+  confidence: Confidence;
+  flags: ClassificationFlag[];
+  source: "ai" | "heuristic";
+}

@@ -24,6 +24,8 @@ import { getSelectableSources } from "@/lib/db/sources";
 import { getReferences } from "@/lib/db/references";
 import { logAudit } from "@/lib/db/audit";
 import { extractFactCandidates } from "@/lib/services/factExtractionService";
+import { partitionForOutput } from "@/lib/services/verificationGate";
+import { verifyRecord } from "@/lib/db/classification";
 import { suggestCitations } from "@/lib/services/legalReferenceSuggestionService";
 import { buildChecklist } from "@/lib/services/proceduralChecklistService";
 import { checkPackageConsistency, type PackageDocument } from "@/lib/services/documentConsistencyService";
@@ -98,6 +100,7 @@ export default function CourtActionPage({ params }: { params: Promise<{ id: stri
   const [assignedRefs, setAssignedRefs] = useState<LegalReference[]>([]);
   const [questions, setQuestions] = useState<GuidedQuestion[]>([]);
   const [facts, setFacts] = useState<FactCandidate[]>([]);
+  const [blockedSources, setBlockedSources] = useState<SelectableSource[]>([]);
   const [citations, setCitations] = useState<CitationSuggestion[]>([]);
   const [components, setComponents] = useState<PackageComponent[]>(TEMPORARY_RELIEF_PACKAGE.map((c) => ({ ...c })));
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -207,10 +210,16 @@ export default function CourtActionPage({ params }: { params: Promise<{ id: stri
   }, [action, freeText, sources, selectedSources, questions, facts, citations, components]);
 
   // Entering step 4 with no facts yet → extract candidates from selections + answers.
+  // Verify-at-use gate: only VERIFIED sources feed fact candidates; unverified
+  // selections are surfaced with an inline verify step and excluded until verified.
   useEffect(() => {
     if (step === 4 && facts.length === 0 && sources.length > 0) {
       const chosen = sources.filter((s) => selectedSources.includes(s.id));
-      setFacts(extractFactCandidates(chosen, questions));
+      const { allowed, blocked } = partitionForOutput(
+        chosen.map((s) => ({ ...s, verificationStatus: s.verificationStatus })),
+      );
+      setBlockedSources(blocked);
+      setFacts(extractFactCandidates(allowed, questions));
     }
     if (step === 5 && citations.length === 0 && assignedRefs.length > 0 && action) {
       setCitations(suggestCitations(`${TASK_TYPE_LABEL[action.task_type]} ${freeText}`, assignedRefs));
@@ -421,6 +430,27 @@ export default function CourtActionPage({ params }: { params: Promise<{ id: stri
           {step === 4 && (
             <div>
               <StepHeading title="Review the factual record" sub="Each proposed fact shows its source and support level. Only facts you approve can appear in the package." />
+              {blockedSources.length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-orange-800 mb-1"><AlertTriangle size={14} /> {blockedSources.length} selected source{blockedSources.length !== 1 ? "s" : ""} not yet verified</p>
+                  <p className="text-xs text-orange-700 mb-2">Imported records can be browsed and linked, but must be verified before they feed a generated document. Verify to include them here.</p>
+                  <div className="space-y-1">
+                    {blockedSources.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between gap-2 bg-white border border-orange-100 rounded-lg px-2.5 py-1.5">
+                        <span className="text-xs text-gray-700 truncate">{s.label}</span>
+                        <button onClick={async () => {
+                          if (!user || !activeCase) return;
+                          const table = s.sourceType === "communication" ? "communications" : "evidence";
+                          await verifyRecord(table, s.id, activeCase.id, user.id);
+                          setBlockedSources((prev) => prev.filter((b) => b.id !== s.id));
+                          setFacts([]); // re-extract including the newly verified source
+                        }}
+                          className="text-[11px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg px-2 py-1 flex-shrink-0 transition-colors">Verify</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {facts.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-10">No fact candidates yet — select sources in step 2 or answer questions in step 3, then return here.</p>
               ) : (

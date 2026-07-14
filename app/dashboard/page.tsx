@@ -44,11 +44,13 @@ interface Metrics {
   people: number;
   tasks: number;
   unverifiedDeadlines: number;
+  importMandatory: number;
+  importReview: number;
 }
 
 export default function DashboardPage() {
   const { activeCase } = useAuth();
-  const [metrics, setMetrics] = useState<Metrics>({ evidence: 0, events: 0, people: 0, tasks: 0, unverifiedDeadlines: 0 });
+  const [metrics, setMetrics] = useState<Metrics>({ evidence: 0, events: 0, people: 0, tasks: 0, unverifiedDeadlines: 0, importMandatory: 0, importReview: 0 });
   const [recentEvidence, setRecentEvidence] = useState<RecentEvidence[]>([]);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
@@ -83,12 +85,19 @@ export default function DashboardPage() {
       .select("*", { count: "exact", head: true })
       .eq("case_id", caseId).eq("status", "requires_verification");
 
+    const [{ count: mandatoryCount }, { count: reviewCount }] = await Promise.all([
+      supabase.from("import_file_classifications").select("*", { count: "exact", head: true }).eq("case_id", caseId).eq("routing", "mandatory").eq("resolved", false),
+      supabase.from("import_file_classifications").select("*", { count: "exact", head: true }).eq("case_id", caseId).eq("routing", "review_queue"),
+    ]);
+
     setMetrics({
       evidence: evCount ?? 0,
       events: eventCount ?? 0,
       people: peopleCount ?? 0,
       tasks: taskCount ?? 0,
       unverifiedDeadlines: dlCount ?? 0,
+      importMandatory: mandatoryCount ?? 0,
+      importReview: reviewCount ?? 0,
     });
     setRecentEvidence((recentEv ?? []) as RecentEvidence[]);
     setRecentEvents((recentEv2 ?? []) as RecentEvent[]);
@@ -128,6 +137,19 @@ export default function DashboardPage() {
                 <strong>{metrics.unverifiedDeadlines} deadline{metrics.unverifiedDeadlines !== 1 ? "s" : ""} requiring verification.</strong> Verify them on the Calendar so they appear with a confirmed date.
               </p>
               <ArrowRight size={15} className="text-orange-400" />
+            </Link>
+          )}
+
+          {!loading && (metrics.importMandatory > 0 || metrics.importReview > 0) && (
+            <Link href="/import" className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5 hover:bg-blue-100 transition-colors">
+              <FileText size={16} className="text-blue-600 flex-shrink-0" />
+              <p className="text-sm text-blue-800 flex-1">
+                <strong>Imported records awaiting attention.</strong>{" "}
+                {metrics.importMandatory > 0 && <>{metrics.importMandatory} need confirmation</>}
+                {metrics.importMandatory > 0 && metrics.importReview > 0 && " · "}
+                {metrics.importReview > 0 && <>{metrics.importReview} in the review queue</>}. Everything is already stored and browsable.
+              </p>
+              <ArrowRight size={15} className="text-blue-400" />
             </Link>
           )}
 

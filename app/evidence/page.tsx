@@ -10,7 +10,9 @@ import {
   FileText, Upload, Search, Download, BookMarked,
   Tag, Calendar, AlertTriangle, CheckCircle, Clock,
   FileSpreadsheet, Archive, Image, Trash2, FolderOpen, X,
+  ShieldCheck, ShieldAlert, ShieldQuestion,
 } from "lucide-react";
+import { verifyRecord } from "@/lib/db/classification";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = [
@@ -39,6 +41,7 @@ interface EvidenceRow {
   date_of_document: string | null;
   tags: string[] | null;
   created_at: string;
+  verification_status: string;
 }
 
 function fileTypeIcon(type: string | null) {
@@ -61,10 +64,14 @@ function EvidenceCard({
   item,
   onDelete,
   onStatusChange,
+  onVerify,
+  onAddToTimeline,
 }: {
   item: EvidenceRow;
   onDelete: (id: string, path: string | null) => void;
   onStatusChange: (id: string, status: Status) => void;
+  onVerify: (id: string) => void;
+  onAddToTimeline: (item: EvidenceRow) => void;
 }) {
   const status = (item.status as Status) ?? "pending";
   const StatusIcon = statusConfig[status]?.icon ?? Clock;
@@ -104,6 +111,14 @@ function EvidenceCard({
               <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.category}</span>
               {item.file_type && <span>{item.file_type.toUpperCase()}</span>}
               {item.file_size_bytes && <span>{formatBytes(item.file_size_bytes)}</span>}
+              {item.verification_status === "verified" ? (
+                <span className="flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full"><ShieldCheck size={10} /> Verified</span>
+              ) : item.verification_status === "disputed" ? (
+                <span className="flex items-center gap-1 text-red-700 bg-red-50 px-2 py-0.5 rounded-full"><ShieldAlert size={10} /> Disputed</span>
+              ) : (
+                <button onClick={() => onVerify(item.id)} title="Mark verified"
+                  className="flex items-center gap-1 text-orange-700 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-full transition-colors"><ShieldQuestion size={10} /> Unverified — verify</button>
+              )}
             </div>
           </div>
         </div>
@@ -140,6 +155,12 @@ function EvidenceCard({
           >
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{statusConfig[s].label}</option>)}
           </select>
+          {item.verification_status === "verified" && item.date_of_document && (
+            <button onClick={() => onAddToTimeline(item)}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-purple-600 transition-colors px-2.5 py-1.5 hover:bg-purple-50 rounded-lg" title="Add a timeline event for this document's date">
+              <Clock size={12} /> Add to timeline
+            </button>
+          )}
         </div>
         <button
           onClick={() => onDelete(item.id, item.file_path)}
@@ -157,6 +178,7 @@ export default function EvidencePage() {
   const [evidence, setEvidence] = useState<EvidenceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All Evidence");
+  const [verifyFilter, setVerifyFilter] = useState<"all" | "unverified" | "verified" | "disputed">("all");
   const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -173,7 +195,7 @@ export default function EvidencePage() {
     setLoading(true);
     const { data } = await supabase
       .from("evidence")
-      .select("id, title, category, file_path, file_type, file_size_bytes, notes, status, date_of_document, tags, created_at")
+      .select("id, title, category, file_path, file_type, file_size_bytes, notes, status, date_of_document, tags, created_at, verification_status")
       .eq("case_id", activeCase.id)
       .order("created_at", { ascending: false });
     setEvidence((data ?? []) as EvidenceRow[]);
@@ -259,14 +281,36 @@ export default function EvidencePage() {
     setEvidence((prev) => prev.map((e) => e.id === id ? { ...e, status } : e));
   };
 
+  const handleVerify = async (id: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !activeCase) return;
+    try { await verifyRecord("evidence", id, activeCase.id, user.id); } catch { alert("Could not verify."); return; }
+    setEvidence((prev) => prev.map((e) => e.id === id ? { ...e, verification_status: "verified" } : e));
+  };
+
+  // Suggested timeline event from a verified document's date — explicit action, never automatic.
+  const handleAddToTimeline = async (item: EvidenceRow) => {
+    if (!activeCase || !item.date_of_document) return;
+    const { error } = await supabase.from("timeline_events").insert({
+      case_id: activeCase.id, title: item.title, event_date: item.date_of_document,
+      category: item.category === "Court Orders" ? "Court Orders" : "Other",
+      description: `Added from evidence "${item.title}".`, severity: "low",
+    } as never);
+    if (error) { alert(`Could not add to timeline: ${error.message}`); return; }
+    alert("Added to your timeline.");
+  };
+
   const filtered = evidence.filter((item) => {
     const matchCat = selectedCategory === "All Evidence" || item.category === selectedCategory;
+    const matchVerify = verifyFilter === "all" || (item.verification_status ?? "verified") === verifyFilter;
     const matchSearch = !search ||
       item.title.toLowerCase().includes(search.toLowerCase()) ||
       (item.notes ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (item.tags ?? []).some((t) => t.toLowerCase().includes(search.toLowerCase()));
-    return matchCat && matchSearch;
+    return matchCat && matchVerify && matchSearch;
   });
+
+  const unverifiedCount = evidence.filter((e) => (e.verification_status ?? "verified") === "unverified").length;
 
   const counts: Record<string, number> = { "All Evidence": evidence.length };
   CATEGORIES.slice(1).forEach((cat) => {
@@ -342,9 +386,19 @@ export default function EvidencePage() {
             </button>
           </div>
 
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            {(["all", "verified", "unverified", "disputed"] as const).map((v) => (
+              <button key={v} onClick={() => setVerifyFilter(v)}
+                className={cn("text-xs font-medium px-3 py-1.5 rounded-full border capitalize transition-colors",
+                  verifyFilter === v ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-600 border-gray-200 hover:border-purple-300")}>
+                {v}{v === "unverified" && unverifiedCount > 0 ? ` (${unverifiedCount})` : ""}
+              </button>
+            ))}
+          </div>
+
           <p className="text-xs text-gray-400 mb-4">
             {loading ? "Loading…" : <>Showing <strong className="text-gray-600">{filtered.length}</strong> of {evidence.length} items</>}
-            {search && <> · Search: "<strong className="text-purple-600">{search}</strong>"</>}
+            {search && <> · Search: &quot;<strong className="text-purple-600">{search}</strong>&quot;</>}
           </p>
 
           {loading ? (
@@ -366,7 +420,7 @@ export default function EvidencePage() {
           ) : (
             <div className="grid grid-cols-2 gap-4">
               {filtered.map((item) => (
-                <EvidenceCard key={item.id} item={item} onDelete={handleDelete} onStatusChange={handleStatusChange} />
+                <EvidenceCard key={item.id} item={item} onDelete={handleDelete} onStatusChange={handleStatusChange} onVerify={handleVerify} onAddToTimeline={handleAddToTimeline} />
               ))}
             </div>
           )}

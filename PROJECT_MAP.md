@@ -1,15 +1,28 @@
 # Evidence OS — Project Map
 
-Branch: `claude/court-action-workspace` · Updated 2026-07-13 (discovery generation + tracking pass)
+Branch: `claude/court-action-workspace` · Updated 2026-07-14 (import classification + lazy-verification pass)
 
-> Migrations now run through **009** (…`008_deadlines_tracking.sql`, `009_imports.sql`).
+> Migrations now run through **010** (…`009_imports.sql`, `010_classification.sql`).
 > New tables: `subpoena_items`, `deadlines`, `instrument_responses`, `deficiency_entries`,
-> `inbound_filings`, `import_batches`, `import_files` (74 total); `evidence` gained
-> `extracted_text` / `text_source` / `page_count`. New routes: `/inbound`, `/import`,
-> `/import/[id]`, `/api/intake-suggest`. New deps: pdfjs-dist, mammoth, fflate.
-> New test suites: `test:discovery` (22), `test:deadlines` (14), `test:import` (24) — full run
-> `npm test` = 121 assertions + 36-file neutral-language scan. Bulk import + text extraction:
-> see docs/IMPORT_PIPELINE.md.
+> `inbound_filings`, `import_batches`, `import_files`, `import_file_classifications`; `evidence`
+> and `communications` gained `verification_status` / `verified_by` / `verified_at` /
+> `source_import_file_id` (defaults to `verified` so existing records are not retroactively
+> blocked); `evidence` earlier gained `extracted_text` / `text_source` / `page_count`.
+> New routes: `/inbound`, `/import`, `/import/[id]`, `/import/[id]/review`,
+> `/api/intake-suggest`, `/api/classify-file`. New deps: pdfjs-dist, mammoth, fflate.
+> New test suites: `test:discovery` (22), `test:deadlines` (14), `test:import` (24),
+> `test:import-classification` (27) — full run `npm test` = 148 assertions + 41-file
+> neutral-language scan. Bulk import + text extraction: see docs/IMPORT_PIPELINE.md.
+>
+> **Import classification + lazy verification (010):** per-file classifier
+> (`lib/services/importClassification.ts`, deterministic heuristic + optional LLM via
+> `/api/classify-file`, never auto-creates people, reuses `redaction.ts` for confidential
+> flags, summaries screened by `checkProhibited`). Routing (`importRouting.ts`): HIGH+no-flags
+> auto-promote as `unverified`; MEDIUM/LOW/any-flag → review queue; MANDATORY confirmation for
+> court orders (no `court_orders` row until confirmed), hearing/deadline dates (no calendar
+> entry until confirmed), and wrong-case-number quarantine. Verify-at-use gate
+> (`verificationGate.ts`) blocks unverified/disputed records from any generated-output flow at
+> selection time. Review workspace at `/import/[id]/review`.
 
 ## Tech stack
 
@@ -80,14 +93,16 @@ evidenceos/
 │   ├── disclaimers.ts · mock-data.ts · utils.ts
 ├── supabase/migrations/  001_initial_schema · 002_communications ·
 │                         003_documents_references_reviews · 004_security_audit ·
-│                         005_seed_templates · 006_court_actions
+│                         005_seed_templates · 006_court_actions ·
+│                         007_discovery_subpoenas · 008_deadlines_tracking ·
+│                         009_imports · 010_classification
 ├── test/  alias-loader.mjs · phase3.test.ts · court-actions.test.ts · neutral-language.test.ts
 ├── docs/  ARCHITECTURE.md · COURT_ACTION_PLAN.md · SETUP.md
 ├── middleware.ts · next.config.ts · eslint.config.mjs · postcss.config.mjs
 ├── package.json · tsconfig.json · .env.local.example · README.md · CLAUDE.md · AGENTS.md
 ```
 
-## Database schema (67 tables, all RLS-protected)
+## Database schema (all RLS-protected)
 
 **001 — Core case data:** `profiles`, `cases` (expanded in 003/006 with case_number, case_type, state, county, circuit_district, court_name, division, judge, magistrate, petitioner, respondent, user_role, opposing_party, opposing_counsel, date_opened), `people`, `evidence`, `timeline_events`, `exhibits`, `tasks`, `court_orders`, `hearings`, `hearing_packets` *(legacy, superseded by 006 `hearing_packages`)*, join tables `evidence_timeline_links`, `evidence_people_links`, `timeline_people_links`
 
@@ -100,6 +115,14 @@ evidenceos/
 **005 — Seed:** 6 built-in rows in `document_templates` + 24 `template_variables`
 
 **006 — Court Action Workspace:** `court_actions`, `court_action_answers`, `court_action_sources`, `fact_candidates`, `citation_suggestions`, `court_action_packages`, `package_components`, `package_consistency_findings`, `document_definitions`, `official_forms`, `case_style_profiles`, `court_captions`, `signature_profiles`, `service_profiles`, `document_component_settings`, `jurisdiction_reference_packs`, `reference_pack_items`, `procedural_checklists`, `procedural_checklist_items`, `discovery_requests`, `discovery_request_items`, `subpoenas`, `question_sets`, `questions`, `hearing_packages`, `exhibit_packets`, `exhibit_coversheets`, `user_review_confirmations`
+
+**007 — Discovery / subpoenas:** `subpoena_items` (+ discovery/subpoena tracking columns)
+
+**008 — Deadline tracking:** `deadlines`, `instrument_responses`, `deficiency_entries`
+
+**009 — Imports:** `inbound_filings`, `import_batches`, `import_files`; `evidence` gained `extracted_text` / `text_source` / `page_count`
+
+**010 — Import classification / lazy verification:** `import_file_classifications`; `evidence` + `communications` gained `verification_status` / `verified_by` / `verified_at` / `source_import_file_id` (default `verified`)
 
 Storage: one private bucket `evidence-files` (signed URLs).
 
@@ -129,6 +152,7 @@ Storage: one private bucket `evidence-files` (signed URLs).
 | Documents (library + 7-step wizard + detail) | **working** | Real sources, guarded generation, versioned persistence, DOCX/PDF/text export w/ redaction review |
 | References | **working** | CRUD, verify, assign-to-case, version/supersede plumbing; file-upload ingestion now extracts text (PDF/DOCX/TXT) via the shared extraction service |
 | Bulk Import (`/import`) | **working** | Drag-drop folder + files + client-side zip expansion; sha256 dedup (resumable), 5-way concurrent upload to the evidence bucket under a batch prefix, live status table w/ filters; text extraction (pdfjs/mammoth) with needs_ocr detection; single/bulk promotion to evidence sharing the same storage object; backfill over existing evidence; audit-logged |
+| Import classification + review (`/import/[id]/review`) | **working** | Per-file classifier (heuristic + optional LLM), lazy-verification routing (auto-promote HIGH+clean as unverified; review queue for MEDIUM/LOW/flagged; mandatory confirm for court orders, hearing/deadline dates, wrong-case-number quarantine); reconstruction review workspace; verify-at-use gate blocks unverified/disputed from generated output; verification badges + inline verify + timeline-add on evidence/communications lists; dashboard "awaiting attention" card |
 | Document Review | **working** | Real review service against saved docs, pasted text, or an uploaded DOCX/PDF (text extracted via the shared service); findings + decisions persist |
 | Court Actions (10-step wizard) | **working** | Persistence per step; fact/citation approval gates; package generation → generated_documents; consistency report; checklist; redaction-screened export + audit log |
 | Discovery | **working** | All four instruments (RFP / rogs / RFA w/ phrasing templates / subpoena duces tecum) generate caption-correct, redaction-screened printable documents; unified dashboard with finalize (confirmations), mark-served (creates requires-verification deadline), response logging, and deficiency worksheets with neutral compel pathway |
