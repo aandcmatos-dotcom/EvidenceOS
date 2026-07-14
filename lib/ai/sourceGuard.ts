@@ -64,6 +64,13 @@ const PROHIBITED_PATTERNS: { re: RegExp; label: string }[] = [
   { re: /\byou will (win|lose|prevail)\b/i, label: "predicts outcome" },
   { re: /\bthe judge (will|must) (rule|grant|deny|find)\b/i, label: "predicts a ruling" },
   { re: /\bi recommend (filing|the|a) (motion|strategy|claim)\b/i, label: "recommends strategy" },
+  // Hearing-preparation / contempt neutrality: describe only "possible
+  // noncompliance". Never characterize intent or assert a court finding.
+  { re: /\bwillful(ly)?\b/i, label: "characterizes intent (willfulness)" },
+  { re: /\bcontempt (was|has been|is|will be) (committed|established|proven|found)\b/i, label: "asserts a contempt finding" },
+  { re: /\b(in violation of|violated (the )?(order|court|judgment|decree|agreement))\b/i, label: "asserts a violation as fact" },
+  { re: /\b(guaranteed|certain|sure) to (win|prevail|succeed)\b/i, label: "predicts outcome" },
+  { re: /\b(likely|probably) to (win|prevail|succeed)\b/i, label: "predicts likely outcome" },
 ];
 
 export interface ProhibitedCheck {

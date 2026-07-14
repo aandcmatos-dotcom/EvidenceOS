@@ -17,6 +17,7 @@ const SCAN_DIRS = [
   "app/inbound", "components/deadlines", "lib/services/deadlines.ts", "lib/db/deadlines.ts",
   "app/import", "lib/import", "lib/services/extraction.ts", "lib/db/imports.ts",
   "lib/services/importClassification.ts", "lib/services/importRouting.ts", "lib/db/classification.ts",
+  "lib/services/hearingPreparation.ts",
 ];
 
 // Banned as user-facing labels for document options / outcomes (Section 2 + 7).
@@ -31,6 +32,11 @@ const BANNED: { re: RegExp; label: string }[] = [
   { re: /\blegally (sufficient|valid)\b(?!.*\bnot\b)/i, label: "legal-sufficiency claim" },
   { re: /\bis admissible\b/i, label: "admissibility claim" },
   { re: /\bwe recommend (filing|the motion|this document)\b/i, label: "filing recommendation" },
+  // Hearing-prep / contempt: describe "possible noncompliance" only.
+  { re: /\bwillful(ly)?\b/i, label: "willfulness characterization" },
+  { re: /\bcontempt (was|is) (committed|established)\b/i, label: "asserted contempt finding" },
+  { re: /\bin violation of\b/i, label: "asserted violation" },
+  { re: /\b(guaranteed|likely) (win|to win|outcome|result)\b/i, label: "outcome prediction" },
 ];
 
 function collectFiles(path: string): string[] {

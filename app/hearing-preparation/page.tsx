@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { createAction } from "@/lib/db/court-actions";
 import { logAudit } from "@/lib/db/audit";
+import { HEARING_PRESETS, getPreset } from "@/lib/services/hearingPreparation";
 import { CalendarClock, ArrowRight, AlertTriangle, Gavel } from "lucide-react";
 import Link from "next/link";
 
@@ -27,7 +28,7 @@ export default function HearingPreparationPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ hearingType: "", hearingDate: "", timeAllowed: "" });
+  const [form, setForm] = useState({ hearingType: "", hearingDate: "", timeAllowed: "", presetKey: "" });
 
   const supabase = createClient();
 
@@ -61,6 +62,7 @@ export default function HearingPreparationPage() {
         case_id: activeCase.id, action_id: action.id, name: `Hearing package — ${form.hearingType.trim()}`,
         hearing_type: form.hearingType.trim(), hearing_date: form.hearingDate || null,
         time_allowed: form.timeAllowed.trim() || null,
+        hearing_type_key: form.presetKey || null,
       } as never);
       if (pkgErr) throw pkgErr;
       await logAudit({ userId: user.id, caseId: activeCase.id, action: "hearing_package.create", entityType: "court_actions", entityId: action.id });
@@ -90,6 +92,19 @@ export default function HearingPreparationPage() {
               summaries, witness and exhibit lists, questions, checklists — is generated from the same
               approved fact set so dates, names, and requested relief stay consistent.
             </p>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Preset <span className="text-gray-400 font-normal">(optional)</span></label>
+            <select value={form.presetKey}
+              onChange={(e) => {
+                const p = getPreset(e.target.value);
+                setForm((f) => ({ ...f, presetKey: e.target.value, hearingType: p ? p.label : f.hearingType }));
+              }}
+              className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 mb-1.5">
+              <option value="">No preset — free-form hearing type</option>
+              {HEARING_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+            {form.presetKey && (
+              <p className="text-xs text-gray-500 mb-3">{getPreset(form.presetKey)?.description} Worksheets are built from your assigned references — nothing is pre-filled with legal factors.</p>
+            )}
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Hearing type <span className="text-red-400">*</span></label>
             <input value={form.hearingType} onChange={(e) => setForm((f) => ({ ...f, hearingType: e.target.value }))}
               placeholder="e.g. Temporary relief hearing"

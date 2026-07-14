@@ -5,10 +5,11 @@
 
 import type { FactCandidate } from "@/lib/court-actions/types";
 import { checkQuestionSafety, markFoundationNeeds } from "@/lib/ai/questionSafetyGuard";
+import { checkProhibited } from "@/lib/ai/sourceGuard";
 
 export type QuestionType =
   | "direct" | "cross" | "redirect" | "rebuttal"
-  | "deposition" | "interview" | "custodian" | "expert";
+  | "deposition" | "interview" | "custodian" | "expert" | "contempt";
 
 export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   direct: "Direct examination",
@@ -19,6 +20,7 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   interview: "Witness interview",
   custodian: "Custodian of records",
   expert: "Expert witness",
+  contempt: "Contempt / enforcement (possible noncompliance)",
 };
 
 export interface GeneratedQuestion {
@@ -60,7 +62,12 @@ export function generateQuestions(req: QuestionGenRequest): QuestionGenResult {
     const src = f.sourceLabel ?? "User-provided fact";
     const dated = f.sourceDate ? ` on ${f.sourceDate}` : "";
 
-    if (req.questionType === "cross") {
+    if (req.questionType === "contempt") {
+      // Enforcement questions describe POSSIBLE NONCOMPLIANCE only — the guards
+      // below drop anything that asserts a violation, willfulness, or a finding.
+      drafts.push({ text: `What does the existing order require regarding: ${trimFact(factText)}?`, groupLabel: "Order requirements", sourceLabel: src });
+      drafts.push({ text: `What records describe possible noncompliance with that requirement${dated}?`, groupLabel: "Possible noncompliance", sourceLabel: src });
+    } else if (req.questionType === "cross") {
       // Short, single-fact, non-assumptive.
       drafts.push({ text: `Were you present${dated} for the events described in the records regarding: ${trimFact(factText)}?`, groupLabel: "Personal knowledge", sourceLabel: src });
       drafts.push({ text: `Do you have any record that contradicts the following: ${trimFact(factText)}?`, groupLabel: "Contradictions", sourceLabel: src });
@@ -84,7 +91,7 @@ export function generateQuestions(req: QuestionGenRequest): QuestionGenResult {
   }
 
   // Safety gate: drop anything the guard flags.
-  const safe = drafts.filter((d) => checkQuestionSafety(d.text).ok);
+  const safe = drafts.filter((d) => checkQuestionSafety(d.text).ok && checkProhibited(d.text).clean);
   const removedForSafety = drafts.length - safe.length;
   if (removedForSafety > 0) warnings.push(`${removedForSafety} draft question(s) were removed by the safety screen.`);
 

@@ -1,8 +1,8 @@
 # Evidence OS — Project Map
 
-Branch: `claude/court-action-workspace` · Updated 2026-07-14 (import classification + lazy-verification pass)
+Branch: `claude/court-action-workspace` · Updated 2026-07-14 (import classification + hearing-preparation pass)
 
-> Migrations now run through **010** (…`009_imports.sql`, `010_classification.sql`).
+> Migrations now run through **011** (…`010_classification.sql`, `011_hearing_presets.sql`).
 > New tables: `subpoena_items`, `deadlines`, `instrument_responses`, `deficiency_entries`,
 > `inbound_filings`, `import_batches`, `import_files`, `import_file_classifications`; `evidence`
 > and `communications` gained `verification_status` / `verified_by` / `verified_at` /
@@ -11,8 +11,20 @@ Branch: `claude/court-action-workspace` · Updated 2026-07-14 (import classifica
 > New routes: `/inbound`, `/import`, `/import/[id]`, `/import/[id]/review`,
 > `/api/intake-suggest`, `/api/classify-file`. New deps: pdfjs-dist, mammoth, fflate.
 > New test suites: `test:discovery` (22), `test:deadlines` (14), `test:import` (24),
-> `test:import-classification` (27) — full run `npm test` = 148 assertions + 41-file
-> neutral-language scan. Bulk import + text extraction: see docs/IMPORT_PIPELINE.md.
+> `test:import-classification` (27), `test:hearing-prep` (17) — full run `npm test` = 165
+> assertions + 42-file neutral-language scan. Bulk import + text extraction: see
+> docs/IMPORT_PIPELINE.md.
+>
+> **Hearing preparation (011):** hearing-type-aware presets (`hearing_type_presets`,
+> global seeds + per-case editable) drive worksheets built ONLY from the user's assigned
+> references — no hardcoded legal factors/elements; when no reference is on file the worksheet
+> says "verify with the court". `lib/services/hearingPreparation.ts`: `buildWorksheet`,
+> `buildHearingChecklist` (cites the assigned judge/division procedure or points to the court),
+> `buildNoncomplianceQuestions` (double-screened). A "contempt / enforcement" question type in
+> `/questions` and all generated hearing copy describe **possible noncompliance** only — the
+> neutral-language gate (runtime `checkProhibited` + CI scan) now bans willfulness, asserted
+> violations/contempt findings, and outcome predictions. `/hearing-notebook` retired → redirects
+> to `/hearing-preparation`.
 >
 > **Import classification + lazy verification (010):** per-file classifier
 > (`lib/services/importClassification.ts`, deterministic heuristic + optional LLM via
@@ -95,7 +107,7 @@ evidenceos/
 │                         003_documents_references_reviews · 004_security_audit ·
 │                         005_seed_templates · 006_court_actions ·
 │                         007_discovery_subpoenas · 008_deadlines_tracking ·
-│                         009_imports · 010_classification
+│                         009_imports · 010_classification · 011_hearing_presets
 ├── test/  alias-loader.mjs · phase3.test.ts · court-actions.test.ts · neutral-language.test.ts
 ├── docs/  ARCHITECTURE.md · COURT_ACTION_PLAN.md · SETUP.md
 ├── middleware.ts · next.config.ts · eslint.config.mjs · postcss.config.mjs
@@ -123,6 +135,8 @@ evidenceos/
 **009 — Imports:** `inbound_filings`, `import_batches`, `import_files`; `evidence` gained `extracted_text` / `text_source` / `page_count`
 
 **010 — Import classification / lazy verification:** `import_file_classifications`; `evidence` + `communications` gained `verification_status` / `verified_by` / `verified_at` / `source_import_file_id` (default `verified`)
+
+**011 — Hearing presets:** `hearing_type_presets` (workflow metadata only, no legal factors); `hearing_packages` gained `hearing_type_key` / `preset_notes`
 
 Storage: one private bucket `evidence-files` (signed URLs).
 

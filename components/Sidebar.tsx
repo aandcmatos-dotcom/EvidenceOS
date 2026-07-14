@@ -13,7 +13,6 @@ import {
   CalendarDays,
   CheckSquare,
   Scale,
-  BookOpen,
   BarChart3,
   Settings,
   ChevronDown,
@@ -52,7 +51,6 @@ const navItems = [
   { href: "/references", label: "References", icon: Library },
   { href: "/document-review", label: "Document Review", icon: ClipboardCheck },
   { href: "/patterns", label: "AI Insights", icon: Sparkles },
-  { href: "/hearing-notebook", label: "Hearing Notebook", icon: BookOpen },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

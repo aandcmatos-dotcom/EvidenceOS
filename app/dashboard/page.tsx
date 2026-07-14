@@ -248,7 +248,7 @@ export default function DashboardPage() {
                 ))}
               </div>
               <div className="mt-4 pt-4 border-t border-gray-100">
-                <Link href="/hearing-notebook" className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors">
+                <Link href="/hearing-preparation" className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors">
                   Prepare Hearing Packet
                 </Link>
               </div>
