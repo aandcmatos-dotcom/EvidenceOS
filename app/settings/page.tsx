@@ -1,20 +1,81 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppLayout from "@/components/AppLayout";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Database, LogOut, Check } from "lucide-react";
+import { Database, LogOut, Check, Users, UserPlus, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCaseMembers, getCaseInvites, createInvite, type CaseMemberRow, type CaseInviteRow } from "@/lib/db/caseMembers";
+import { buildCaseExport } from "@/lib/services/caseExport";
+import { logAudit } from "@/lib/db/audit";
 
 export default function SettingsPage() {
-  const { user, cases, activeCase, setActiveCase, signOut } = useAuth();
+  const { user, cases, activeCase, caseRole, setActiveCase, signOut } = useAuth();
   const [fullName, setFullName] = useState("");
   const [plan, setPlan] = useState("free");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [members, setMembers] = useState<CaseMemberRow[]>([]);
+  const [invites, setInvites] = useState<CaseInviteRow[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState("");
+
   const supabase = createClient();
+
+  const loadTeam = useCallback(async () => {
+    if (!activeCase) { setMembers([]); setInvites([]); return; }
+    try {
+      const [m, i] = await Promise.all([getCaseMembers(activeCase.id), getCaseInvites(activeCase.id)]);
+      setMembers(m);
+      setInvites(i);
+    } catch {
+      setMembers([]); setInvites([]);
+    }
+  }, [activeCase]);
+
+  useEffect(() => { loadTeam(); }, [loadTeam]);
+
+  const sendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !activeCase || !inviteEmail.trim()) return;
+    setInviting(true);
+    setInviteError("");
+    try {
+      await createInvite(activeCase.id, inviteEmail.trim(), user.id);
+      await logAudit({ userId: user.id, caseId: activeCase.id, action: "case_invite.create", entityType: "case_invites" });
+      setInviteEmail("");
+      await loadTeam();
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Could not send the invite.");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const exportCase = async () => {
+    if (!user || !activeCase) return;
+    setExporting(true);
+    try {
+      const blob = await buildCaseExport(activeCase.id, activeCase.name, user.id, (p) => setExportProgress(`${p.table} (${p.done + 1}/${p.total})`));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${activeCase.name.replace(/[^\w-]+/g, "_")}-export.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await logAudit({ userId: user.id, caseId: activeCase.id, action: "case.export", entityType: "cases", entityId: activeCase.id });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+      setExportProgress("");
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -102,6 +163,79 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+
+        {/* Team & Access */}
+        {activeCase && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Users size={16} className="text-purple-600" />
+              <h2 className="font-semibold text-gray-900 text-sm">Team &amp; Access — {activeCase.name}</h2>
+            </div>
+            <div className="space-y-2 mb-4">
+              {members.map((m) => (
+                <div key={m.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{m.profiles?.full_name || m.profiles?.email || m.user_id}</p>
+                    <p className="text-xs text-gray-400">{m.profiles?.email}</p>
+                  </div>
+                  <span className={cn("text-xs px-2.5 py-1 rounded-full font-semibold capitalize",
+                    m.role === "party" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700")}>{m.role}</span>
+                </div>
+              ))}
+              {invites.filter((i) => !i.accepted_at).map((i) => (
+                <div key={i.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100">
+                  <p className="text-sm text-amber-800">{i.email}</p>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/invite?token=${i.token}`)}
+                    className="text-xs text-amber-700 font-medium hover:underline"
+                  >
+                    Copy invite link
+                  </button>
+                </div>
+              ))}
+            </div>
+            {caseRole === "party" ? (
+              <form onSubmit={sendInvite} className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Invite a helper by email</label>
+                  <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="helper@example.com"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400" />
+                </div>
+                <button type="submit" disabled={inviting || !inviteEmail.trim()}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                  <UserPlus size={14} /> {inviting ? "Sending…" : "Invite"}
+                </button>
+              </form>
+            ) : (
+              <p className="text-xs text-gray-400">Only the case party can invite helpers.</p>
+            )}
+            {inviteError && <p className="text-xs text-red-600 mt-2">{inviteError}</p>}
+            <p className="text-xs text-gray-400 mt-3">
+              Helpers can create, edit, upload, and prepare drafts. Confirmations, deadline verification, final
+              approvals, and document export/finalization stay with the party — helper work shows as
+              &quot;Awaiting party approval&quot; until reviewed.
+            </p>
+          </div>
+        )}
+
+        {/* Full-case export */}
+        {activeCase && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Download size={16} className="text-purple-600" />
+              <h2 className="font-semibold text-gray-900 text-sm">Export this case</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Download a ZIP of every record and file for {activeCase.name} — your own copy, portable to
+              another tool at any time. Includes case data as JSON plus the stored evidence files.
+            </p>
+            <button onClick={exportCase} disabled={exporting}
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+              <Download size={14} /> {exporting ? (exportProgress || "Exporting…") : "Download full export"}
+            </button>
+          </div>
+        )}
 
         {/* Account */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">

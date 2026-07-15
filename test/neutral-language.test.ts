@@ -18,6 +18,9 @@ const SCAN_DIRS = [
   "app/import", "lib/import", "lib/services/extraction.ts", "lib/db/imports.ts",
   "lib/services/importClassification.ts", "lib/services/importRouting.ts", "lib/db/classification.ts",
   "lib/services/hearingPreparation.ts",
+  "app/settings", "app/invite", "app/onboarding", "components/shared/DisclaimerAckModal.tsx",
+  "lib/services/roleGuard.ts", "lib/services/referenceChecklist.ts", "lib/services/caseExport.ts",
+  "lib/db/caseMembers.ts", "lib/db/referencePacks.ts",
 ];
 
 // Banned as user-facing labels for document options / outcomes (Section 2 + 7).

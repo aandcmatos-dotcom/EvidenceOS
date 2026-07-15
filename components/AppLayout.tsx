@@ -1,5 +1,6 @@
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import DisclaimerAckModal from "./shared/DisclaimerAckModal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ interface AppLayoutProps {
 export default function AppLayout({ children, title, caseName }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen bg-gray-50">
+      <DisclaimerAckModal />
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar title={title} caseName={caseName} />

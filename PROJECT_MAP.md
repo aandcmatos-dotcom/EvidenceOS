@@ -1,8 +1,36 @@
 # Evidence OS — Project Map
 
-Branch: `claude/court-action-workspace` · Updated 2026-07-14 (import classification + hearing-preparation pass)
+Branch: `claude/court-action-workspace` · Updated 2026-07-15 (roles, security audit, tester onboarding pass)
 
-> Migrations now run through **011** (…`010_classification.sql`, `011_hearing_presets.sql`).
+> Migrations now run through **012** (…`011_hearing_presets.sql`, `012_roles_and_security.sql`).
+>
+> **Party/Helper roles + security hardening (012):** `case_members` (party|helper, auto-registers
+> the owner as party on case creation), `case_invites` (email-token invite, accepted via the
+> `accept_case_invite()` SQL function so an unregistered helper can insert their own membership
+> row). Every case-scoped table's RLS was re-pointed from `cases.owner_id = auth.uid()` to
+> `is_case_member()`, giving helpers the same read/write reach as the party EXCEPT four
+> approval surfaces enforced by BEFORE triggers (RLS can't see "which column changed"):
+> `user_review_confirmations` (party-only), deadline verification (`status -> verified`),
+> fact_candidate/citation_suggestion final decisions (`approved`/`rejected` — `edited`/`pending`
+> stay open to helpers), and `generated_documents`/`document_exports` finalize/export.
+> `lib/services/roleGuard.ts` mirrors these for pre-emptive UI errors. Storage (`evidence-files`)
+> moved from dashboard-configured uploader-only policies to case-scoped SQL policies
+> (`storage.objects`, keyed on the object path's case-id folder segment) — see
+> `docs/SECURITY_AUDIT.md` finding F-6. `case_reference_attestations` gives each user their own
+> per-case verification of a shared reference — packs (`jurisdiction_reference_packs` +
+> `reference_pack_items`) link reference pointers only, never an attestation
+> (`lib/db/referencePacks.ts`). Minimum reference checklist (`lib/services/referenceChecklist.ts`,
+> 8 categories) surfaces on `/references` and the dashboard. Full-case export
+> (`lib/services/caseExport.ts`) ZIPs ~30 case-scoped tables + evidence files, RLS-isolated.
+> First-login disclaimer acknowledgment (`profiles.disclaimer_ack_at`,
+> `components/shared/DisclaimerAckModal.tsx`). New routes: `/invite` (accept a helper invite),
+> `/onboarding/references` (post-case-creation pack/checklist step). `contexts/AuthContext.tsx`'s
+> case list query was fixed to rely on RLS membership instead of `owner_id` (was hiding every
+> case from a helper). Full RLS/trigger behavior was verified live against Postgres 16 as the
+> non-superuser `authenticated` role — see `docs/SECURITY_AUDIT.md` §1 for the test approach and
+> §2 for seven findings (six were pre-existing gaps this task's own testing surfaced and fixed
+> before merge, not regressions). `test:roles` (31): service-layer guard, attestation-never-
+> copies logic, checklist mapping, export scoping.
 > New tables: `subpoena_items`, `deadlines`, `instrument_responses`, `deficiency_entries`,
 > `inbound_filings`, `import_batches`, `import_files`, `import_file_classifications`; `evidence`
 > and `communications` gained `verification_status` / `verified_by` / `verified_at` /
@@ -11,9 +39,9 @@ Branch: `claude/court-action-workspace` · Updated 2026-07-14 (import classifica
 > New routes: `/inbound`, `/import`, `/import/[id]`, `/import/[id]/review`,
 > `/api/intake-suggest`, `/api/classify-file`. New deps: pdfjs-dist, mammoth, fflate.
 > New test suites: `test:discovery` (22), `test:deadlines` (14), `test:import` (24),
-> `test:import-classification` (27), `test:hearing-prep` (17) — full run `npm test` = 165
-> assertions + 42-file neutral-language scan. Bulk import + text extraction: see
-> docs/IMPORT_PIPELINE.md.
+> `test:import-classification` (27), `test:hearing-prep` (17), `test:roles` (31) — full run
+> `npm test` = 196 assertions + 52-file neutral-language scan. Bulk import + text extraction:
+> see docs/IMPORT_PIPELINE.md. Security audit: docs/SECURITY_AUDIT.md.
 >
 > **Hearing preparation (011):** hearing-type-aware presets (`hearing_type_presets`,
 > global seeds + per-case editable) drive worksheets built ONLY from the user's assigned
@@ -107,7 +135,8 @@ evidenceos/
 │                         003_documents_references_reviews · 004_security_audit ·
 │                         005_seed_templates · 006_court_actions ·
 │                         007_discovery_subpoenas · 008_deadlines_tracking ·
-│                         009_imports · 010_classification · 011_hearing_presets
+│                         009_imports · 010_classification · 011_hearing_presets ·
+│                         012_roles_and_security
 ├── test/  alias-loader.mjs · phase3.test.ts · court-actions.test.ts · neutral-language.test.ts
 ├── docs/  ARCHITECTURE.md · COURT_ACTION_PLAN.md · SETUP.md
 ├── middleware.ts · next.config.ts · eslint.config.mjs · postcss.config.mjs
@@ -138,14 +167,17 @@ evidenceos/
 
 **011 — Hearing presets:** `hearing_type_presets` (workflow metadata only, no legal factors); `hearing_packages` gained `hearing_type_key` / `preset_notes`
 
-Storage: one private bucket `evidence-files` (signed URLs).
+**012 — Roles / security:** `case_members`, `case_invites`, `case_reference_attestations`; every case-scoped table's RLS re-pointed at `is_case_member()`/`is_case_party()`; BEFORE triggers gate deadline verification, fact/citation final decisions, and document finalize/export to the party; `profiles` gained `disclaimer_ack_at`; `jurisdiction_reference_packs`/`reference_pack_items` opened to global read
+
+Storage: one private bucket `evidence-files` (signed URLs, case-scoped object policies as of migration 012 — see docs/SECURITY_AUDIT.md).
 
 ## Routes / pages
 
 | Route | Purpose |
 |---|---|
 | `/` | Redirect → /dashboard |
-| `/login` · `/signup` · `/auth/callback` · `/onboarding` | Auth + expanded case creation (jurisdiction/party fields) |
+| `/login` · `/signup` · `/auth/callback` · `/onboarding` · `/onboarding/references` | Auth + expanded case creation (jurisdiction/party fields) + post-creation reference-pack/checklist step |
+| `/invite` | Accept a case-helper invite (`?token=...`) |
 | `/dashboard` | Real metrics, recents, module quick-access cards |
 | `/timeline` · `/evidence` · `/exhibits` · `/people` · `/communications` · `/calendar` · `/tasks` · `/court-orders` | Case-record CRUD modules |
 | `/court-actions` · `/court-actions/new` · `/court-actions/[id]` | Dashboard · "Tell Us What Is Happening" intake · 10-step guided wizard |
@@ -164,7 +196,8 @@ Storage: one private bucket `evidence-files` (signed URLs).
 | Dashboard | **working** | Live Supabase counts + recents |
 | Timeline / Evidence / Exhibits / People / Communications / Calendar / Tasks / Court Orders | **working** | Full CRUD; evidence uploads to private bucket; exhibits print a coversheet packet |
 | Documents (library + 7-step wizard + detail) | **working** | Real sources, guarded generation, versioned persistence, DOCX/PDF/text export w/ redaction review |
-| References | **working** | CRUD, verify, assign-to-case, version/supersede plumbing; file-upload ingestion now extracts text (PDF/DOCX/TXT) via the shared extraction service |
+| References | **working** | CRUD, verify, assign-to-case, version/supersede plumbing; file-upload ingestion now extracts text (PDF/DOCX/TXT) via the shared extraction service; minimum reference checklist (8 categories) shown per case; jurisdiction packs (save-from-case / apply-to-case, never copies attestation) |
+| Party/Helper roles + Settings (`/settings`) | **working** | Invite a helper by email (token link via `/invite`); team list with role badges; full-case export (ZIP of ~30 tables + evidence files); helper has full create/edit/upload rights, party-only for confirmations/deadline verification/final fact-citation decisions/document finalize-export, enforced in RLS + BEFORE triggers, not just UI (see docs/SECURITY_AUDIT.md) |
 | Bulk Import (`/import`) | **working** | Drag-drop folder + files + client-side zip expansion; sha256 dedup (resumable), 5-way concurrent upload to the evidence bucket under a batch prefix, live status table w/ filters; text extraction (pdfjs/mammoth) with needs_ocr detection; single/bulk promotion to evidence sharing the same storage object; backfill over existing evidence; audit-logged |
 | Import classification + review (`/import/[id]/review`) | **working** | Per-file classifier (heuristic + optional LLM), lazy-verification routing (auto-promote HIGH+clean as unverified; review queue for MEDIUM/LOW/flagged; mandatory confirm for court orders, hearing/deadline dates, wrong-case-number quarantine); reconstruction review workspace; verify-at-use gate blocks unverified/disputed from generated output; verification badges + inline verify + timeline-add on evidence/communications lists; dashboard "awaiting attention" card |
 | Document Review | **working** | Real review service against saved docs, pasted text, or an uploaded DOCX/PDF (text extracted via the shared service); findings + decisions persist |

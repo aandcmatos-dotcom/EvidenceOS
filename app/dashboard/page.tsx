@@ -153,6 +153,8 @@ export default function DashboardPage() {
             </Link>
           )}
 
+          <ReferenceChecklistBanner />
+
           {/* Metric Cards */}
           <div className="grid grid-cols-4 gap-4 mb-6">
             <MetricCard icon={<FolderOpen size={20} className="text-purple-600" />} bg="bg-purple-50"
@@ -335,6 +337,35 @@ export default function DashboardPage() {
         </>
       )}
     </AppLayout>
+  );
+}
+
+function ReferenceChecklistBanner() {
+  const { activeCase } = useAuth();
+  const [missing, setMissing] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!activeCase) { setMissing(null); return; }
+    let cancelled = false;
+    Promise.all([
+      import("@/lib/db/referencePacks").then((m) => m.getCaseAssignedReferenceCategories(activeCase.id)),
+      import("@/lib/services/referenceChecklist").then((m) => m.computeChecklistStatus),
+    ]).then(([categories, compute]) => {
+      if (cancelled) return;
+      setMissing(compute(categories).filter((c) => !c.done).length);
+    }).catch(() => { if (!cancelled) setMissing(null); });
+    return () => { cancelled = true; };
+  }, [activeCase]);
+
+  if (!missing) return null;
+  return (
+    <Link href="/references" className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 hover:bg-amber-100 transition-colors">
+      <FileText size={16} className="text-amber-600 flex-shrink-0" />
+      <p className="text-sm text-amber-800 flex-1">
+        <strong>{missing} reference categor{missing === 1 ? "y" : "ies"} not yet on file.</strong> Add or apply a pack from References.
+      </p>
+      <ArrowRight size={15} className="text-amber-400" />
+    </Link>
   );
 }
 

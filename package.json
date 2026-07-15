@@ -15,7 +15,8 @@
     "test:import": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/import.test.ts",
     "test:import-classification": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/import-classification.test.ts",
     "test:hearing-prep": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/hearing-prep.test.ts",
-    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:import && npm run test:import-classification && npm run test:hearing-prep && npm run test:language"
+    "test:roles": "node --experimental-strip-types --loader ./test/alias-loader.mjs test/roles.test.ts",
+    "test": "npm run test:phase3 && npm run test:court-actions && npm run test:discovery && npm run test:deadlines && npm run test:import && npm run test:import-classification && npm run test:hearing-prep && npm run test:roles && npm run test:language"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

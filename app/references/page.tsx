@@ -8,7 +8,9 @@ import AssistantLauncher from "@/components/assistant/AssistantLauncher";
 import { VerificationBadge, SourceTierBadge } from "@/components/shared/badges";
 import { useAuth } from "@/contexts/AuthContext";
 import { getReferences, createReference, assignReferenceToCase, verifyReference } from "@/lib/db/references";
-import { REFERENCE_CATEGORIES, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/references/types";
+import { getCaseAssignedReferenceCategories } from "@/lib/db/referencePacks";
+import { computeChecklistStatus, CHECKLIST_CATEGORY_KEYS, CHECKLIST_CATEGORY_LABEL } from "@/lib/services/referenceChecklist";
+import { REFERENCE_CATEGORIES, VERIFICATION_LABEL, type VerificationStatus, type ReferenceCategory } from "@/lib/references/types";
 import {
   Library, Search, Plus, ExternalLink, Calendar, MapPin, CheckCircle2,
   Link2, Upload, FileText, AlertTriangle,
@@ -45,6 +47,12 @@ export default function ReferencesPage() {
   const [verification, setVerification] = useState("All");
   const [showCurrentOnly, setShowCurrentOnly] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
+  const [caseCategories, setCaseCategories] = useState<ReferenceCategory[]>([]);
+
+  useEffect(() => {
+    if (!activeCase) { setCaseCategories([]); return; }
+    getCaseAssignedReferenceCategories(activeCase.id).then(setCaseCategories).catch(() => setCaseCategories([]));
+  }, [activeCase]);
 
   const fetchRefs = useCallback(async () => {
     if (!user) return;
@@ -88,6 +96,23 @@ export default function ReferencesPage() {
   return (
     <AppLayout title="References">
       <div className="mb-5"><Disclaimer compact /></div>
+
+      {activeCase && (
+        <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Minimum reference checklist — {activeCase.name}</p>
+          <div className="flex flex-wrap gap-2">
+            {CHECKLIST_CATEGORY_KEYS.map((key) => {
+              const c = computeChecklistStatus(caseCategories).find((x) => x.key === key)!;
+              return (
+                <span key={key} className={cn("text-xs px-2.5 py-1 rounded-full border",
+                  c.done ? "bg-green-50 border-green-200 text-green-700" : "bg-gray-50 border-gray-200 text-gray-500")}>
+                  {c.done ? "✓ " : "— "}{CHECKLIST_CATEGORY_LABEL[key]}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4 mb-5">
         <SummaryCard icon={<Library size={18} className="text-purple-600" />} bg="bg-purple-50" value={loading ? "…" : references.length} label="Stored references" />

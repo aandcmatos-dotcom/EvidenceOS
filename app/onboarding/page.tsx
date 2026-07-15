@@ -47,7 +47,7 @@ export default function OnboardingPage() {
     // jurisdiction summary string kept for existing display code
     const jurisdiction = [form.county && `${form.county} County`, form.state].filter(Boolean).join(", ") || null;
 
-    const { error: caseError } = await supabase.from("cases").insert({
+    const { data: newCase, error: caseError } = await supabase.from("cases").insert({
       owner_id: user.id,
       name: form.name.trim(),
       case_number: form.case_number.trim() || null,
@@ -67,13 +67,14 @@ export default function OnboardingPage() {
       date_opened: form.date_opened || null,
       jurisdiction,
       status: form.status,
-    } as never);
+    } as never).select("id").single();
 
     if (caseError) {
       setError(caseError.message);
       setLoading(false);
     } else {
-      window.location.href = "/dashboard";
+      const id = (newCase as unknown as { id: string }).id;
+      window.location.href = `/onboarding/references?case=${id}`;
     }
   };
 
