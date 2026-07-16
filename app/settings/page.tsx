@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import AppLayout from "@/components/AppLayout";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Database, LogOut, Check, Users, UserPlus, Download } from "lucide-react";
+import { Database, LogOut, Check, Users, UserPlus, Download, Sparkles, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCaseMembers, getCaseInvites, createInvite, type CaseMemberRow, type CaseInviteRow } from "@/lib/db/caseMembers";
 import { buildCaseExport } from "@/lib/services/caseExport";
@@ -25,7 +25,22 @@ export default function SettingsPage() {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
 
+  const [aiStatus, setAiStatus] = useState<{ configured: boolean; connected: boolean; model: string | null; error: string | null } | null>(null);
+  const [checkingAi, setCheckingAi] = useState(false);
+
   const supabase = createClient();
+
+  const checkAiConnection = async () => {
+    setCheckingAi(true);
+    try {
+      const res = await fetch("/api/ai-status");
+      setAiStatus(await res.json());
+    } catch {
+      setAiStatus({ configured: false, connected: false, model: null, error: "Could not reach the status check itself." });
+    } finally {
+      setCheckingAi(false);
+    }
+  };
 
   const loadTeam = useCallback(async () => {
     if (!activeCase) { setMembers([]); setInvites([]); return; }
@@ -162,6 +177,47 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* AI Connection */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles size={16} className="text-purple-600" />
+            <h2 className="font-semibold text-gray-900 text-sm">AI Connection</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Every AI-assisted feature (import classification, document drafting, question
+            generation) works without this — it falls back to deterministic, non-AI logic
+            automatically. This checks whether your <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">ANTHROPIC_API_KEY</code> is
+            actually reachable, so a bad key doesn&apos;t just silently look like nothing happened.
+          </p>
+
+          {aiStatus && (
+            <div className={cn("flex items-start gap-2.5 rounded-xl p-3 mb-4 border",
+              aiStatus.connected ? "bg-green-50 border-green-200" :
+              aiStatus.configured ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200")}>
+              {aiStatus.connected ? <CheckCircle2 size={16} className="text-green-600 mt-0.5 flex-shrink-0" /> :
+                aiStatus.configured ? <XCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" /> :
+                <HelpCircle size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />}
+              <div className="text-sm">
+                {aiStatus.connected ? (
+                  <p className="text-green-800"><strong>Connected.</strong> Using model <code className="text-xs bg-white/60 px-1 py-0.5 rounded">{aiStatus.model}</code>.</p>
+                ) : aiStatus.configured ? (
+                  <>
+                    <p className="text-red-800 font-semibold mb-0.5">Key present, but the connection failed.</p>
+                    <p className="text-red-700 text-xs">{aiStatus.error}</p>
+                  </>
+                ) : (
+                  <p className="text-gray-600">Not configured — <code className="text-xs bg-white px-1 py-0.5 rounded">ANTHROPIC_API_KEY</code> is not set. AI features use their deterministic fallback.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <button onClick={checkAiConnection} disabled={checkingAi}
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+            <Sparkles size={14} /> {checkingAi ? "Checking…" : "Check connection"}
+          </button>
         </div>
 
         {/* Team & Access */}

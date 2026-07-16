@@ -208,7 +208,8 @@ Storage: one private bucket `evidence-files` (signed URLs, case-scoped object po
 | Inbound Filings (`/inbound`) | **working** | Received filing → evidence + optional deadline + noticed hearing + prefilled response wizard; optional LLM classification via `/api/intake-suggest` (deterministic form without key) |
 | Question Builder | **working** | Safety-screened, foundation-flagged sets; save + print |
 | Hearing Preparation | **working** | Creates hearing-prep action + hearing_packages row; deep hearing-specific component presets **partial** (uses the standard package preset) |
-| AI Assistant panel | **partial** | UI + modes + strategy refusal work; responses are deterministic previews; conversations not yet persisted to ai_* tables; live LLM adapter present but not wired to the panel |
+| AI Assistant panel | **partial** | UI + modes + strategy refusal work; responses are deterministic previews; conversations not yet persisted to ai_* tables; live LLM adapter present but not wired to the panel. Launcher button is now draggable + position-persisted (`localStorage`) since it previously covered wizard/import "Continue" buttons at its fixed bottom-right spot |
+| AI Connection diagnostic (`/settings`) | **working** | On-demand real Anthropic ping (`/api/ai-status` -> `checkAnthropicConnection()`) reporting configured/connected/model/error — distinct from every feature path's silent-null fallback, so a bad key doesn't look identical to "no key set." `callModelJSON` now logs failures server-side (status, body snippet, network errors) instead of swallowing them silently |
 | Pattern Insights | **working** | Rule-based analysis of real timeline data (no LLM) |
 | Reports | **working** | 5 live generators (print/CSV) |
 | Hearing Notebook | **working (legacy)** | Kept until Hearing Preparation fully supersedes it |
